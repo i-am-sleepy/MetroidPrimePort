@@ -1,0 +1,39 @@
+name: android-apk
+on:
+  workflow_dispatch:
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 180
+    steps:
+      - uses: actions/checkout@v4
+      - name: Apply touch-look patch
+        run: python3 touchlook_patch.py
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.7'
+      - name: SDK, NDK, CMake
+        run: |
+          NDKV=$(grep -oP 'ndkVersion "\K[^"]+' android/app/build.gradle)
+          CMV=$(grep -oP '^\s*version "\K[0-9.]+(?=")' android/app/build.gradle | head -1)
+          SDKV=$(grep -oP 'compileSdk \K[0-9]+' android/app/build.gradle | head -1)
+          echo "NDK=$NDKV CMake=$CMV SDK=$SDKV"
+          echo "NDKV=$NDKV" >> "$GITHUB_ENV"
+          yes | sdkmanager --licenses > /dev/null || true
+          sdkmanager "platforms;android-$SDKV" "build-tools;34.0.0" "ndk;$NDKV" "cmake;$CMV"
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-linux-android
+      - name: Build
+        run: |
+          export ANDROID_NDK_HOME="$ANDROID_HOME/ndk/$NDKV"
+          chmod +x tools/*.sh
+          tools/android_apk.sh :app:assembleRelease
+      - uses: actions/upload-artifact@v4
+        with:
+          name: metroid-prime-touchlook-apk
+          path: android/app/build/outputs/apk/release/*.apk
