@@ -222,7 +222,12 @@ fn vs_main(in: VIn) -> VOut {
   var mean = u.fallbackMean.rgb;
   if (u.misc.z > 0.5) {
     let v = vec4f(vp, 1.0);
-    mean = textureSampleLevel(volMean, cubeSamp, vec3f(dot(u.vol0, v), dot(u.vol1, v), dot(u.vol2, v)), 0.0).rgb;
+    let uvw = vec3f(dot(u.vol0, v), dot(u.vol1, v), dot(u.vol2, v));
+    // Black outside the grid, as Remastered's CLAMP_TO_BORDER sampler reads it.
+    let vsize = vec3f(textureDimensions(volMean));
+    let vt = uvw * vsize;
+    let vw = clamp(min(vt + 0.5, vsize + 0.5 - vt), vec3f(0.0), vec3f(1.0));
+    mean = textureSampleLevel(volMean, cubeSamp, uvw, 0.0).rgb * (vw.x * vw.y * vw.z);
   }
   out.light = vec4f(mean * u.volScale.rgb, max(max(mean.r, mean.g), mean.b) * u.volScale.w);
   out.fog = vec4f(0.0, 0.0, 0.0, 1.0);

@@ -79,7 +79,7 @@ rejected. Nod/Aurora supports additional image
 containers, but the same retail content is required.
 
 `metroid_prime_port --version` prints the source revision without initializing
-graphics. The same revision appears in the launch log and F1 Performance tab.
+graphics. The same revision appears in the launch log, the F1 menu header and F1 > Video > Frame rate.
 Include it when reporting a copied build from another machine; a `-dirty` suffix
 means the executable was built with uncommitted source changes.
 
@@ -105,7 +105,7 @@ is used only when:
   portable.
 
 On Android the folder starts in the app's own storage, which other apps and file
-managers cannot reach. F1 > Extras > Data folder moves it to
+managers cannot reach. F1 > System > Data folder moves it to
 `/storage/emulated/0/MetroidPrime/` (the shared storage root): it asks for "All
 files access" (Android 11+; storage permission on 9/10), copies saves, settings,
 mods, save states, the texture pack and the copied disc there with a progress
@@ -151,8 +151,7 @@ slow disc will dominate that part instead.
 Measured on the development machine (RTX 5070 Ti, warm pipeline cache, cutscenes
 skipped, `SDL_VIDEODRIVER=x11`): **913 ms, 1180 ms, 1526 ms** over three runs.
 The spread is the first-frame work varying with what the driver had cached, so
-treat it as roughly a second rather than a precise figure. The existing F1
-Performance tab still reports the steady-state render and simulation rates once
+treat it as roughly a second rather than a precise figure. F1 > Video > Frame rate still reports the steady-state render and simulation rates once
 running.
 
 ### Frame pacing
@@ -318,8 +317,8 @@ A user pack is layered over that built-in set, with the same folder rules. It
 lives in `user_textures` in the user folder (`user/` beside the executable; for a read-only install `~/.local/share/Metroid Prime/`
 on Linux, `~/.var/app/io.github.odrannnn.metroidprimeport/data/Metroid Prime/`
 in the Flatpak, `%APPDATA%\Metroid Prime\` on Windows), or wherever
-`MP_USER_TEXTURES` points, so updates never touch it; the overlay's Render page
-has a Reload button. On Android, Render > Texture pack > Choose texture pack
+`MP_USER_TEXTURES` points, so updates never touch it; the overlay's Mods page
+has a Reload button. On Android, Mods > Texture pack > Choose texture pack
 folder opens the system folder picker and copies the folder's `.png`/`.dds`
 files into the data folder (pick it again after changing it; Remove deletes the
 copy). The copy lands in `user_textures.new` and is swapped in on the next
@@ -377,7 +376,7 @@ to another button gets a GameCube icon, named after the button's default action.
 The binding icons register above the static set, so reloading that set never
 hides them. The chosen icon is logged when it changes ("prompt A keyboard_x").
 `MP_SMOKE_BIND_A=<scancode>` (negative for mouse buttons, -3 is middle) rebinds
-the A action once, for checking this without going through the Controls tab; it
+the A action once, for checking this without going through the Controls page; it
 needs a `-DMP_ENABLE_SMOKE_DRIVER=ON` build such as `build/smoke-gcc`, and
 `MP_FAST_BOOT=1 MP_SKIP_CUTSCENES=1 MP_SMOKE_PAUSE=<ticks>` reaches the pause
 screen quickly to see the result.
@@ -529,17 +528,17 @@ which are authoritative. Inside a mod:
 Mods load at startup, after the disc is opened (the game caches PAK tables when
 it boots), and everything reads through Aurora's DVD overlays, so the game code
 is unchanged. The log lists each mod's counts and any problems ("mods: ..."),
-and F1 > Extras > Mods shows the same, with a Load mods switch (`mods`) and a
+and F1 > Mods shows the same, with a Load mods switch (`mods`) and a
 checkbox per mod (`mods_disabled`, `/`-separated names); both take effect on
 the next start. `tools/extract_textures.py`'s `disc_files`/`pak_resources` get
 a resource's original bytes to edit. Checked with a `0552A456.STRG` (the file
 select's "New Game") read from the disc and from a whole-file `MiscData.pak`
 mod. On Android `mods/` is in the data folder; move that to shared storage
-(F1 > Extras > Data folder) to add mods with a file manager.
+(F1 > System > Data folder) to add mods with a file manager.
 
 #### Reloading without a restart
 
-F1 > Extras > Mods > Reload mods (console: `mods reload`) reads the mods folder
+F1 > Mods > Reload mods (console: `mods reload`) reads the mods folder
 again while the game runs: added, removed, edited, enabled and disabled mods
 all take effect, PAK resources and native `.dds` textures alike. The game is
 rebuilt where Samus stands, exactly as a save state load does (enemies, doors
@@ -554,7 +553,7 @@ so don't delete a loaded mod and keep playing.
 An importer is a program of your own that builds a mod from files you have (a
 model pack, another release of the game); the port ships none. Put an
 executable file (Windows: `.exe`, `.bat`, `.cmd`) in `importers` in the pref
-folder, beside `mods`, and F1 > Extras > Mods gets a Run button for it, with an
+folder, beside `mods`, and F1 > Mods gets a Run button for it, with an
 optional argument field, the tail of its output while it runs, and Cancel.
 `metroid_prime_port --import` lists them and `--import <name> [argument]` runs
 one in the terminal without starting the game, returning its exit code.
@@ -644,7 +643,7 @@ Remastered's French, Spanish, German, Italian and Dutch text comes along too
 (about 1,900 strings each), as extra language sections in the same tables,
 named by Remastered's language codes (`EUFR`, `EUSP`, `EUGE`, `EUIT`, `EUDU`).
 A string Remastered doesn't translate, or one whose buttons don't line up with
-the disc's, stays in English. Pick the language in F1 > Remastered > Text (ini key
+the disc's, stays in English. Pick the language in F1 > Game > Language (ini key
 `text_language`, or `MP_LANGUAGE=EUFR` for one run). It changes while the game
 runs (console: `language EUGE`, `language en`): text already on screen
 switches the next time its menu or screen opens. Without the mod the game stays in English. The disc's fonts are
@@ -687,7 +686,7 @@ and rate, `MP_REMASTERED_MOVIES=0` leaves them out. A movie of any size is
 fitted to the view with its shape kept, so in 4:3 these have bars above and
 below.
 
-The concept art of the Extras gallery comes too: the 120 full-size pictures in
+The concept art of the image galleries comes too: the 120 full-size pictures in
 `UI_FrontEnd` (taller than 1000 pixels) are written as JPEGs into the mod's
 `gallery` folder (`gallery/NNN.jpg`, fitted within 1920x1080, quality 90; about
 0.3 MB each, 36 MB in all), and F1 > Remastered > Gallery opens them in a viewer window. The decoder
@@ -773,17 +772,17 @@ unpacks to a temporary directory instead of mounting.
   precedence. SDL controllers are supported.
 - F1: debug overlay. F10: 60 FPS cap/unlimited presentation. F11: fullscreen.
   F12: screenshot.
-- Fullscreen (F1 > Render, persisted as `fullscreen`): a borderless window over
+- Fullscreen (F1 > Video > Display, persisted as `fullscreen`): a borderless window over
   the whole screen on desktop, toggled with F11; on Android it hides the status
   and navigation bars (on by default there; a swipe from the edge shows them
   for a moment).
 - Settings changed in the F1 overlay (aspect, vsync, render scale, frame limit,
   mouse aim/inversion/sensitivity, audio mutes) are saved to
-  `port_settings.ini` in the user folder (`user/` beside the executable, see above) and restored on the next launch. The Extras tab shows the
+  `port_settings.ini` in the user folder (`user/` beside the executable, see above) and restored on the next launch. The System page shows the
   path and has a **Save settings now** button. Environment variables still
   override the file for that run, and are written back into it if any setting is
   changed during that run.
-- EFB scale (F1 > Quality, persisted as `render_scale`): 1x-4x of the GameCube's
+- EFB scale (F1 > Video > Quality, persisted as `render_scale`): 1x-4x of the GameCube's
   640x528 EFB, or the window's own size with "Auto render scale". Above 2x it
   supersamples (4x at 16:9 is 3755x2112; with MSAA 4 the targets take
   several hundred MB). "Dynamic
@@ -792,12 +791,12 @@ unpacks to a temporary directory instead of mounting.
   steps (half steps above 2x), down to "Lowest scale" (`dynamic_res_min`: 0.5,
   0.75 or 1, default 1). The file also takes a manual `render_scale` under 1.
 - `MP_ASPECT=4:3|16:9|window`; the legacy `MP_WIDESCREEN` selects 16:9.
-- `MP_TWIN_STICK=1` (Input tab, persisted as `twin_stick`): twin-stick aiming. The
+- `MP_TWIN_STICK=1` (Controls > Options, persisted as `twin_stick`): twin-stick aiming. The
   right stick feeds the first-person aim through the same path as the mouse (so
   the same sensitivity/invert apply, tuned by `stick_aim_rate`, default 900 px/s)
   and is consumed, so it no longer drives the game's free-look. Fire stays on
-  whatever is bound to A; remap it in the Controls tab.
-- Spring Ball (Input tab, persisted as `spring_ball`, off by default): C-stick
+  whatever is bound to A; remap it on the Controls page.
+- Spring Ball (Controls > Options, persisted as `spring_ball`, off by default): C-stick
   up in morph ball jumps, as in Metroid Prime Trilogy and the randomprime discs
   the Archipelago world makes, once the Morph Ball Bombs are held. It is a bomb
   jump from the ball's position that keeps the horizontal speed, with the same
@@ -810,22 +809,59 @@ unpacks to a temporary directory instead of mounting.
   to 0.2 s before landing still counts. It reads the gyro aim's source but works
   with gyro aim off. The phone's gyro is turned to the screen's orientation, so
   pitch and yaw stay right in landscape.
+  **Touch aim** (Android, `touch_aim`, on by default; `touch_aim_speed`, default
+  2.25 aim px per dp): with twin stick on, the right stick is gone and a finger
+  dragged on the free screen area turns the view by the distance dragged, like a
+  mouse (`AddTouchAim`, drained in `BeginFrameMouse`). Off, the right stick sets
+  a turn rate as before. In the GameCube layout (neither mouse aim nor twin
+  stick) a drag on the free area outside the pills, D-pad, C-stick and left
+  stick also works: sideways turns Samus by the distance dragged
+  (`CPlayer::UpdateTouchLook`, direct yaw, movement stays tank), up/down looks
+  like R + stick free look while the finger is down (clamped to the free-look
+  limit) and eases back level after release. Not while locked on, in the morph
+  ball, or when the game blocks turning. Console: `touchaim <dx> <dy> [hold s]`
+  (hold keeps the finger "down" that long).
+  **Tap minimap for map** (Android, `touch_map_tap`, on by default): a tap on the
+  HUD minimap (its screen rect, padded 15%, published each frame by
+  `CInGameGuiManager`) presses Z for one poll, which opens the map; the GameCube
+  layout's Z pill is hidden while it is on. Console: `minimap` prints the rect,
+  `maptap` sends the tap.
+  **Beam and visor wheels** (Android, `touch_wheels`, on by default; F1 > Controls > Touch & gyro): in both layouts the D-pad is replaced by two round buttons,
+  Visor and Beam. Holding one opens a 4-sector wheel centred on the press
+  (clamped on screen) in the stock directions (visors up Combat, right X-Ray,
+  down Thermal, left Scan; beams up Power, right Wave, down Ice, left Plasma);
+  sliding lights the sector, release picks it, release in the centre cancels.
+  Items not owned are greyed (owned/current mask from `CPlayer::Think` via
+  `PortDebug::SetWheelState`, polled by `nativeWheelOwned`; all disabled with no
+  player). A pick calls `PortDebug::RequestVisor/RequestBeam`, which holds the
+  command for 120 ms in `ControlMapper::GetPressInput/GetAnalogInput`: stock
+  rules still apply (no beam change in the morph ball or while charging), and
+  Swap Scan/X-Ray doesn't matter. `touch_visor_tap_scan` (off by default, "Tap
+  Visor for Scan Visor"): a tap (<250 ms, <12 dp) on Visor picks Scan. The
+  wheels don't open while the map screen is open. Console: `visor <name|n>`,
+  `beam <name|n>` (no argument prints the current one).
+  **Map pan** (always on): while the map screen is open, a one-finger drag on any
+  free part of the overlay (outside the left stick, which rotates) pans the map so
+  the content follows the finger (`CAutoMapper::ProcessMapPanInput`: a drag of the
+  view height moves the area point by the visible world height; same bounds as the
+  stick). Console: `mappan <dx> <dy> [hold s]` (dp, view height taken as 400 dp; the finger counts as down for `hold` seconds, which stops the map drifting back to its area; ignored
+  while the map is closed). A second finger pinches to zoom (finger spread doubles: camera distance halves, same clamp as L/R) while the midpoint pans; when one finger lifts the other carries on panning. Twisting the two fingers rotates the map's yaw with them (a clockwise twist turns the content clockwise; pitch is left alone). Console: `mapzoom <ratio>`, `maprotate <degrees>` (positive turns the content clockwise, as the stick's right does; both ignored while the map is closed).
   A press of the beam shift springs too (beams don't change in morph ball), as
   X does in Remastered; jump (B) stays the Boost Ball's alone. A shift held from
   before the ball formed has to be let go first.
-- Beam shift (Controls tab): while it is held, the D-pad picks beams the way the
+- Beam shift (Controls > Options): while it is held, the D-pad picks beams the way the
   C-stick does, and visors stay on the plain D-pad, so both are reachable without
   a C-stick. It has two key slots (`shift_key`, `shift_key_alt`; default left
   shift, which already did this under twin stick), a pad slot (`shift_pad`, a
   button or trigger, default none, because Aurora maps LB on many pads to L), and
   it can go on a mouse button. Twin stick keeps left shift as its own modifier,
   and L and LB too while `shift_pad` is unbound.
-- Alt controller buttons (Controls tab, "Alt button" column, persisted as
+- Alt controller buttons (Controls > Controller, "Alt button" column, persisted as
   `pad_alt`, 16 comma-separated native codes indexed by the PAD bit, -1 for
   none): a second controller button or trigger per GameCube button. Aurora maps
   one native button to each PAD button, so the port reads the alt one itself and
   ORs it in (`PortControls::HeldAltPadButtons`, from `CDolphinController`).
-- Control presets (Controls tab). Keyboard: **Classic** (the first-run layout)
+- Control presets (Controls page). Keyboard: **Classic** (the first-run layout)
   and **Mouse & keyboard** (WASD, E fire, Space jump, left ctrl/C morph, F
   missile, Q lock on, left alt free look, Tab/M map, 1-4 beams and 5-8 visors
   through whichever C-stick direction or D-pad button the disc's tweak gives
@@ -840,10 +876,10 @@ unpacks to a temporary directory instead of mounting.
   **Modern** and **Southpaw**. Only Remastered sets `shift_pad`, `pad_alt` and
   `swap_scan_xray`; the others clear them. Remastered and Modern are off for a
   GameCube adapter.
-- Swap the Scan and X-Ray visor buttons (Input tab, persisted as
+- Swap the Scan and X-Ray visor buttons (Controls > Options, persisted as
   `swap_scan_xray`, off by default): each visor takes the other's D-pad
   direction, as in Remastered (D-pad right Scan, left X-Ray).
-- Fast Morph (Input tab and pause Options > Controller, persisted as
+- Fast Morph (Controls > Options and pause Options > Controller, persisted as
   `fast_morph`, off by default): morph ball transitions in the style of Metroid
   Prime 4. Morphing and unmorphing each take 0.2 s instead of 1 s; both
   keep the player's velocity instead of stopping them. Unmorphing on the ground
@@ -851,7 +887,7 @@ unpacks to a temporary directory instead of mounting.
   until landing. Samus's curl-up animation is not shown: the ball forms inside
   the transition flash while the camera eases out, and an unmorph cuts to first
   person behind the transition filter.
-- Toggle Lock-On (Input tab and pause Options > Controller, persisted as
+- Toggle Lock-On (Controls > Options and pause Options > Controller, persisted as
   `lock_on_toggle`, off by default): a press of L latches it held (lock-on,
   scan, strafe, grapple) and the next press lets go. The latch also lets go by
   itself when a lock the player had ends (target dead or out of range). Sticky
@@ -859,13 +895,13 @@ unpacks to a temporary directory instead of mounting.
   for 0.35 s or more keeps the charge held after letting go, and the next press
   fires it; shorter taps shoot as usual. Both are off in morph ball and while
   input is disabled. The console's `status` prints the game's L/A and the charge.
-- The overlay's **Controls** tab rebinds pad 1: click Bind, then press the input.
+- The overlay's **Controls** page rebinds pad 1: click Bind, then press the input.
   "Keyboard & mouse" assigns a key or mouse button to each pad button and stick
   axis; "Controller" assigns a physical controller button or axis. Bindings are
   saved by Aurora next to the other controller data, with buttons to clear the
   keyboard bindings and restore the controller defaults. The beam shift and the
   mouse buttons are rows here too (port settings, not Aurora's).
-- `MP_HUD_WIDE=1` (Render tab, persisted as `hud_wide`): widescreen HUD. The
+- `MP_HUD_WIDE=1` (Video > Display, persisted as `hud_wide`): widescreen HUD. The
   aspect-matched in-game HUD frames keep each element's shape but move it away
   from the screen centre, so edge elements (scan panels, energy bar, map) reach
   the true wide corners instead of being pulled inward. Under a perspective
@@ -874,31 +910,31 @@ unpacks to a temporary directory instead of mounting.
   the rotation leaves what is seen of the element unchanged and the angle is
   derived from the aspect ratio, so it holds at any aspect rather than only
   16:9. Menus, the credits and other non-aspect-matched frames are unaffected.
-- Field of view (Render tab and pause Options > Display, persisted as `fov`,
+- Field of view (Video > Display and pause Options > Display, persisted as `fov`,
   45-90, retail 55): the first-person camera's vertical FOV. The overlay also
   shows the horizontal FOV it gives at the current aspect. The arm cannon is
   drawn at the retail FOV whatever the setting (a view-model FOV), so it keeps
   its size and place. Morph ball, cutscene and other scripted cameras keep
   their own FOVs; cutscenes that end in Samus's eyes ease to the setting.
-- Anti-aliasing and anisotropic filtering (Render tab, persisted as `msaa`,
+- Anti-aliasing and anisotropic filtering (Video > Quality, persisted as `msaa`,
   1 or 4, default 1, and `anisotropy`, 1-16, default 16; pause Options >
   Display has an Anti-Aliasing on/off row): 4x MSAA on the scene framebuffer
   (WebGPU only guarantees 1x and 4x) and the anisotropy cap for mipmapped
   textures, which retail asks for as GX_ANISO_4. Both apply at the start of the
   next frame without a restart; an MSAA change rebuilds the framebuffers and
   pipelines, so it hitches once. Console: `msaa <1|4>`, `aniso <1..16>`.
-- HUD scale (Render tab and pause Options > Display, persisted as `hud_scale`,
+- HUD scale (Video > Display and pause Options > Display, persisted as `hud_scale`,
   50-100 percent, default 100): shrinks the combat HUD, radar, beam and visor
   menus and the minimap toward the screen centre, each frame as a whole so the
   pieces stay on the visor frame. The helmet is not scaled. The minimap eases
   back to full size as it opens into the map screen.
-- Hide helmet and hide visor effects (Render tab and pause Options > Visor,
+- Hide helmet and hide visor effects (Video > Display and pause Options > Visor,
   persisted as `hide_helmet` and `hide_visor_effects`, off by default): the
   first drops the helmet frame (the dome and the lights at the bottom); the
   second drops the faceplate decoration, Samus's face reflection and the
   on-visor billboard effects (rain, splashes, steam). Console:
   `hudscale <50..100>`, `helmet <0|1>`, `visorfx <0|1>` (0 hides).
-- Speedrun timer and LiveSplit (F1 > Extras; the timer also in pause Options >
+- Speedrun timer and LiveSplit (F1 > Game > Speedrun; the timer also in pause Options >
   Display as In-Game Timer). `speedrun_timer` draws the in-game time (the play
   time the save shows, which stops in cutscenes, menus and loads) in the bottom
   right while a game runs. `livesplit` connects to LiveSplit's TCP server
@@ -913,7 +949,7 @@ unpacks to a temporary directory instead of mounting.
   The logic is `PortLiveSplit::Tracker` (`platform/include/port_livesplit.h`,
   covered by `port_livesplit_tests`). Console: `timer <0|1>`, `igt <seconds>`,
   `livesplit <0|1> | addr <host:port> | send <command> | status`.
-- Discord Rich Presence (F1 > Extras > Discord; desktop only, off by default).
+- Discord Rich Presence (F1 > System > Discord; desktop only, off by default).
   Shows the current room as the activity, with the world, the item percentage
   and Hard mode below it, and time elapsed since the game was loaded; the menus
   show "In the menus". It talks to the local Discord client's IPC socket
@@ -936,12 +972,12 @@ unpacks to a temporary directory instead of mounting.
   never tell what the item is; an Archipelago game colours them by its logic
   (`map_logic_colors`, see `ARCHIPELAGO.md`). The positions come from
   `tools/gen_map_pickups.py` (`platform/port_map_pickups.inc`). The Tracker
-  tab shows item percentage, energy tanks, missile
+  page shows item percentage, energy tanks, missile
   capacity (in packs of 5, launcher included), power bombs, artifacts, missing
   upgrades, logbook scans per category (artifacts count at the game's 50%),
   rooms visited per world and the current world's unvisited rooms (their names
   load on first view). Console: `reveal <0|1>`, `pickups <0|1>`, `tracker`.
-- Skippable cutscenes (F1 > Extras > Cutscenes, pause Options > Visor,
+- Skippable cutscenes (F1 > Game > Cutscenes, pause Options > Visor,
   `skippable_cutscenes`, off by default; always on in randomizer and
   Archipelago games) lets Start skip every cutscene, including the ones retail
   never lets you skip and ones not yet watched. It applies randomprime's
@@ -950,7 +986,7 @@ unpacks to a temporary directory instead of mounting.
   finish at once, a Reset ends a beetle's emergence, no skip without a
   cutscene camera). Rooms a mod replaced are left unpatched. Archipelago
   games also skip the Landing Site intro: Samus starts on top of her ship.
-- Elevator ride (F1 > Extras > Cutscenes, pause Options > Visor,
+- Elevator ride (F1 > Game > Cutscenes, pause Options > Visor,
   `elevator_ride`: 0 Original, 1 Fast, 2 Skip; Original by default) sets the
   ride shown between worlds. Retail holds it at least 5 s whatever the load
   takes (`CWorldTransManager`). Fast starts the closing dissolve at 0.5 s and plays it at
@@ -959,12 +995,12 @@ unpacks to a temporary directory instead of mounting.
   no-model transition it stops all sound effects at the switch. The elevator
   room's own cinematic is not affected. `MP_SMOKE_ELEVATOR`'s `passed` line
   prints the ride's wall time.
-- F1 > Debug holds the audio switches, the MusyX voice list (collapsed) and the
+- F1 > Debug > Audio holds the audio switches and the MusyX voice list (collapsed), and F1 > Debug > Cheats holds the
   cheats: health, items, ammo, area and world teleport. The cheats stay hidden
   until Show cheats is ticked (`cheats`, off by default). Invulnerable
   (`invulnerable`, off by default) makes Samus take no damage; it stays on
   across runs until unticked, and `MP_GODMODE=<0|1>` overrides it for one run (see below).
-- F1 > Debug > Log, "Write the log to a file" (`logging`, on by default; the older `log_file` key is ignored):
+- F1 > System > Log, "Write the log to a file" (`logging`, on by default; the older `log_file` key is ignored):
   everything the game prints to stdout/stderr, including the
   line Aurora prints before it aborts, also goes to `metroid_prime_port.log` in
   the user folder; the previous run's is kept as `metroid_prime_port.old.log`.
@@ -997,7 +1033,7 @@ other `X:\Users\<name>`: `X:\Users\<user>`); the
   `metroid_prime_port.pdb` is beside the exe, and a minidump is written to
   `metroid_prime_port.dmp` in the user folder (open it in WinDbg or Visual
   Studio). `MP_CRASH_TEST=segv|abort` crashes on purpose at startup to check it.
-- Save states (F1 > States): eight slots in `savestates/` under the pref
+- Save states (F1 > Save states): eight slots in `savestates/` under the pref
   folder (`slot<N>.mpss`). F5 saves to the selected slot and F9 loads it
   (`savestate_hotkeys`, on by default). A state holds the whole game save
   (items, ammo, doors, pickups, map, scans, world layers) plus Samus's room,
@@ -1008,7 +1044,7 @@ other `X:\Users\<name>`: `X:\Users\<user>`); the
   Saving is refused while Samus is dead. A state saved on an elevator pad
   rides the elevator after loading, like stepping onto it. Console:
   `state list | last | save [n] | load [n] | undo | slot <n>`.
-- Memory card transfer (F1 > Extras > Memory card): moves saves between the
+- Memory card transfer (F1 > System > Memory card): moves saves between the
   port's card (a GCI folder, `user/USA/Card A` beside the executable, or the current
   Archipelago game's) and Dolphin's. Import takes a Dolphin `.gci`, a whole raw
   card image (`MemoryCardA.USA.raw`, every Metroid Prime file in it) or, from the
@@ -1029,7 +1065,7 @@ other `X:\Users\<name>`: `X:\Users\<user>`); the
   Dolphin's names (`01-GM8E-MetroidPrime A.gci`). Logic in
   `platform/port_gci.cpp`, covered by `port_gci_tests`. Console:
   `gci list | import <path> | export <dir or .raw> | dolphin import|export`.
-- Unlocks (F1 > Extras, persisted as `unlock_hard_mode`, `unlock_fusion_suit`,
+- Unlocks (F1 > Game > Unlocks, persisted as `unlock_hard_mode`, `unlock_fusion_suit`,
   `unlock_galleries`, all off by default): offer what finishing the game
   unlocks without finishing it. Hard mode adds Normal/Hard to a new file; the
   Fusion Suit adds its Disabled/Enabled row under Metroid Fusion Connection
@@ -1055,8 +1091,8 @@ other `X:\Users\<name>`: `X:\Users\<user>`); the
   up by default; `MP_MOUSE_INVERT_X=1` and `MP_MOUSE_INVERT_Y=1` invert either axis.
   SDL and the compositor own pointer locking; capture is released outside
   playable first person (menus, cinematics, morph ball, and scripted input locks).
-- In mouse mode the five mouse buttons act as pad buttons, set in the Controls
-  tab's "Mouse buttons" list (`mouse_left`, `mouse_middle`, `mouse_right`,
+- In mouse mode the five mouse buttons act as pad buttons, set in the Controls > Keyboard & mouse
+  sub-tab's "Mouse buttons" list (`mouse_left`, `mouse_middle`, `mouse_right`,
   `mouse_x1`, `mouse_x2`: none, a pad button, a D-pad direction or the beam
   shift). By default **left-click fires / holds a charge / releases a charged
   shot** (A), **right-click holds lock-on** (L) and **middle-click fires
@@ -1075,8 +1111,8 @@ other `X:\Users\<name>`: `X:\Users\<user>`); the
   behavior; closing F1 does not require reacquiring a lock to strafe.
 - Mouse mode requests the GC aiming crosshair without holding R or entering the
   console's movement-restricting free-look mode. `MP_DISABLE_MOUSE_CROSSHAIR=1`
-  opts out. The Input tab exposes inversion, weapon-button and crosshair toggles.
-- Crosshair size (Input tab and pause Options > Controller, persisted as
+  opts out. The Controls > Keyboard & mouse sub-tab exposes inversion, weapon-button and crosshair toggles.
+- Crosshair size (Controls > Keyboard & mouse and pause Options > Controller, persisted as
   `crosshair_size`, 25-100 percent, default 50): scales the free-aim crosshair
   under mouse aim and twin stick, where it is always shown and the retail size
   covers much of the view. Holding R without either keeps the retail size.
@@ -1088,12 +1124,12 @@ other `X:\Users\<name>`: `X:\Users\<user>`); the
 - `MP_DISABLE_AI_AUDIO=1`: start streamed AI audio muted. It can subsequently be
   enabled from the overlay. MusyX mute is independent.
 - `MP_FAST_BOOT=1`, `MP_SKIP_CUTSCENES=1`, `MP_CUTSCENE_SPEED=8`,
-  `MP_SHOW_DEBUG_UI=1`: development controls. Presence flags are enabled by
-  being set; unset them to disable them. Cutscene speed is restricted to 1–32.
+  `MP_SHOW_DEBUG_UI=1`: development controls. On/off variables share one rule (`platform/include/port_env.h`): unset
+  leaves the default, empty/`0`/`false`/`off`/`no` mean off, anything else on. Cutscene speed is restricted to 1–32.
   Cutscene skipping is only available this way, for tests: it is not a player
   setting, since skipping every cinematic at once broke script state.
-  `MP_DEBUG_TAB=<name>` (e.g. `Archipelago`; `Chat` opens its chat page) opens the desktop overlay on that tab,
-  enlarged, for captures. The console's `shot` leaves the overlay out; grab the
+  `MP_DEBUG_TAB=<page>` (e.g. `Video/Quality`; `Chat` opens Archipelago on its Chat sub-tab) opens the desktop overlay on that page,
+  enlarged, for captures. A sub-tab takes `Page/Subtab` (e.g. `Video/Quality`), and the old names still work as aliases: `Input` for Controls, `Render`/`Performance` for Video, `Extras` for Game, `States` for Save states, `Session`/`Chat` for Archipelago. The console's `shot` leaves the overlay out; grab the
   X display instead (PIL `ImageGrab.grab(xdisplay=':99')` under Xvfb).
 - `MP_BOOT_WORLD=<MLVL hex>[:<MREA hex>]`: tests only. Skips the splash screens and
   the front end and starts a new game (default options, no save card) in that world:
@@ -1142,7 +1178,8 @@ other `X:\Users\<name>`: `X:\Users\<user>`); the
   `face <yaw>`, `look <id>`, `objs [filter]`,
   `obj <id>` (AI state, health, body state and animation, connections, whether
   it is frustum-culled),
-  `send <id> <msg>`, `give <item> [n]`, `take <item> [n]`, `items`, `heal`, `god [on|off]`, `press <a+b> [frames]`
+  `send <id> <msg>`, `give <item> [n]`, `take <item> [n]`, `items`, `heal`, `god [on|off]`,
+  `visor [combat|scan|thermal|xray]` (starts the visor transition; it doesn't check that the visor is owned), `press <a+b> [frames]`
   (`sx:<n>`, `sy:<n>`, `cx:<n>`, `cy:<n>` tokens hold stick axes along with
   the buttons, e.g. `press x+sy:127 30`),
   `stick`/`cstick <x> <y> [frames]` (frames `0` on `press`/`stick`/`cstick`
@@ -1150,7 +1187,7 @@ other `X:\Users\<name>`: `X:\Users\<user>`); the
   gyro rates in rad/s), `shot` (prints the bmp path), `present
   <0..1|cycle|tick|off>`, `hold <0|1>` (stop ticking), `step [ticks]` (run
   that many ticks while held), `interp [actor|pose|particle|all <0|1>]`,
-  `aspect <4:3|16:9|window>`, `fov <45..90>`, `msaa <1|4>`, `aniso <1..16>`, `hudscale <50..100>`, `helmet <0|1>`, `visorfx <0|1>`, `crosshair <25..100>`, `reveal <0|1>`, `pickups <0|1>`, `tracker`, `state list | last | save [n] | load [n] | undo | slot <n>`, `viewmodel <cmdl> [dist] [yaw] [pitch] | off | status | light <0|1>` (draws any model, retail or a mod's, in front of the camera with the arm cannon hidden; dist 0 fits its bounds; `light 1` swaps the flat white ambient for a key light, which PBR mod materials need to shade), `probe [off|on|mirror|window]` (the PBR reflection probe, live: `mirror` and `window` show the probe itself on PBR materials, as a reflection and looked straight through; no argument prints the mode), `remastered [start <image.nsp> [key file] | cancel]` (the Remastered model import and its progress), `mods [reload]` (what is loaded; `reload` reads the mods folder again), `roomgeo [on|off|overlay | at <x> <y> <z> [margin] | hide <cmdl> | show [cmdl]]` (a mod's room geometry: in place of the retail area, off, or drawn over it; `at` lists the instances whose box holds a point and `hide` stops drawing a model, for finding which one a surface belongs to; no argument prints what is loaded and drawn), `roomgeo lights on|off` (light room geometry with the area's lights even where the room has baked light), `roomgeo script` (Remastered's own visibility scripts in each loaded area: the camera in area space, each camera zone, counter and relay, and how much of each geometry group is shown), `roomgeo group <n> show|hide` (sets that group in every loaded area until its script next changes it), `roomgeo minpx <n>` (skip room geometry instances smaller than n pixels; see `MP_ROOM_GEO_MIN_PX`), `roomgeo lod <scale>` (see `MP_ROOM_GEO_LOD`), `roomgeo pick` (the instances the middle of the view looks through, nearest first, with each model's materials), `roomgeo mats <cmdl>` (a model's materials: flags, PBR or TEV, the PBR record; any CMDL drawn since `drawlog on` or `view drawid`, not just room geometry), `roomgeo mat <cmdl> <material> <field> <value...> | mat clear` (changes a value of a material's PBR record as drawn, until cleared or the next start; fields `emissive`, `backlight`, `height`, `mode`, `kind`, `strength`, `p0`-`p3`, or an index 0 to 18; emissive multiplies the emissive map, so it shows only on a material that has one), `roomliquid [on|off]` (a mod's liquid surfaces in place of the retail fluid planes; no argument prints what is loaded and drawn), `collision [off|overlay|only]` (draws what Samus collides with: the areas' static collision shaded by facing, walls grey, floors blue, ceilings red, lava orange, phazon cyan, grates yellow, with each triangle's edges, and active solid actors such as gates and platforms as orange boxes; `only` hides the world but Samus, so walls with no surface on them show), `colldump <x0> <y0> <z0> <x1> <y1> <z1> <file.obj>` (the current area's collision triangles touching a box, as an OBJ with each face's material bits in a comment), `roomenv [on|off|exposure on|off|bloom on|off|grade on|off|volume on|off|ambient <scale>|show off|coords|light|info [<x> <y> <z>]|balllight on|off|<scale>]` (room environments: `volume` is the baked light per pixel, `ambient` scales the baked ambient, `show` draws the grid's coordinates or light in place of the surface, `info` prints exposure, tone curve, probe and baked ambient at the view or a point), `view [off|albedo|normal|rough|metal|ao|ambient|reflection|glow|exposure|kind|drawid]` (what PBR surfaces show: one input of the shading in place of the result), `drawlog [on|off|dump <file>]` (numbers every model surface drawn and records it; `dump` writes the last frame as TSV: serial, CMDL, material, owner, record, PBR or TEV, shader hash), `pick <x> <y>` (the draw at a window pixel, top-left origin, by way of `view drawid`), `shader dump <dir>|override <dir>|off|reload` (the generated WGSL as `<hash>.wgsl` plus `index.tsv`, also `MP_WGSL_DUMP`; compile edited copies in place of the generated ones, also `MP_WGSL_OVERRIDE`; see `docs/DEBUGGING.md` "Shaders"), `gputimes on|off|show` (per-render-pass GPU times from timestamp queries, 60-frame averages: ms and passes per frame for each pass name, plus the total and first-begin-to-last-end span; also F1 > Remastered > Rendering "GPU pass times"; free while off), `stats` (the last frame's draws and buffers, the heap, room geometry and environments), `hdfont [on|off]`, `touchpad [attach|detach|stick <x> <y>]` (a virtual gamepad of the kind Android's touch overlay uses, to test controller hotplug against it on any platform), `freecam [on|off|freeze on|off|player on|off|speed <n>|pos <x> <y> <z>|look <yaw> <pitch>]` (see below), `timer <0|1>`, `igt <seconds>`, `livesplit <0|1> | addr <host:port> | send <command> | status`, `discord <0|1> | id <application id> | status`, `gci list | import <path> | export <dir or .raw> | dolphin import|export`, `ap [connect <server> <slot> [password] | disconnect | recent | resume <n> | say <text> | chat]`, `wait <frames>`, `quit`; `help` lists them. Ids are hex editor ids, `u<n>`
+  `aspect <4:3|16:9|window>`, `fov <45..90>`, `msaa <1|4>`, `aniso <1..16>`, `hudscale <50..100>`, `helmet <0|1>`, `visorfx <0|1>`, `crosshair <25..100>`, `reveal <0|1>`, `pickups <0|1>`, `tracker`, `state list | last | save [n] | load [n] | undo | slot <n>`, `viewmodel <cmdl> [dist] [yaw] [pitch] | off | status | light <0|1>` (draws any model, retail or a mod's, in front of the camera with the arm cannon hidden; dist 0 fits its bounds; `light 1` swaps the flat white ambient for a key light, which PBR mod materials need to shade), `probe [off|on|mirror|window]` (the PBR reflection probe, live: `mirror` and `window` show the probe itself on PBR materials, as a reflection and looked straight through; no argument prints the mode), `remastered [start <image.nsp> [key file] | cancel]` (the Remastered model import and its progress), `mods [reload]` (what is loaded; `reload` reads the mods folder again), `roomgeo [on|off|overlay | at <x> <y> <z> [margin] | hide <cmdl> | show [cmdl]]` (a mod's room geometry: in place of the retail area, off, or drawn over it; `at` lists the instances whose box holds a point and `hide` stops drawing a model, for finding which one a surface belongs to; no argument prints what is loaded and drawn), `roomgeo lights on|off` (light room geometry with the area's lights even where the room has baked light), `roomgeo script` (Remastered's own visibility scripts in each loaded area: the camera in area space, each camera zone, counter and relay, and how much of each geometry group is shown), `roomgeo group <n> show|hide` (sets that group in every loaded area until its script next changes it), `roomgeo minpx <n>` (skip room geometry instances smaller than n pixels; see `MP_ROOM_GEO_MIN_PX`), `roomgeo lod <scale>` (see `MP_ROOM_GEO_LOD`), `roomgeo pick` (the instances the middle of the view looks through, nearest first, with each model's materials), `roomgeo mats <cmdl>` (a model's materials: flags, PBR or TEV, the PBR record; any CMDL drawn since `drawlog on` or `view drawid`, not just room geometry), `roomgeo mat <cmdl> <material> <field> <value...> | mat clear` (changes a value of a material's PBR record as drawn, until cleared or the next start; fields `emissive`, `backlight`, `height`, `mode`, `kind`, `strength`, `p0`-`p3`, or an index 0 to 18; emissive multiplies the emissive map, so it shows only on a material that has one), `roomliquid [on|off]` (a mod's liquid surfaces in place of the retail fluid planes; no argument prints what is loaded and drawn), `collision [off|overlay|only]` (draws what Samus collides with: the areas' static collision shaded by facing, walls grey, floors blue, ceilings red, lava orange, phazon cyan, grates yellow, with each triangle's edges, and active solid actors such as gates and platforms as orange boxes; `only` hides the world but Samus, so walls with no surface on them show), `colldump <x0> <y0> <z0> <x1> <y1> <z1> <file.obj>` (the current area's collision triangles touching a box, as an OBJ with each face's material bits in a comment), `roomenv [on|off|exposure on|off|bloom on|off|grade on|off|volume on|off|ambient <scale>|show off|coords|light|info [<x> <y> <z>]|balllight on|off|<scale>]` (room environments: `volume` is the baked light per pixel, `ambient` scales the baked ambient, `show` draws the grid's coordinates or light in place of the surface, `info` prints exposure, tone curve, probe and baked ambient at the view or a point), `view [off|albedo|normal|rough|metal|ao|ambient|reflection|glow|exposure|kind|drawid]` (what PBR surfaces show: one input of the shading in place of the result), `drawlog [on|off|dump <file>]` (numbers every model surface drawn and records it; `dump` writes the last frame as TSV: serial, CMDL, material, owner, record, PBR or TEV, shader hash), `pick <x> <y>` (the draw at a window pixel, top-left origin, by way of `view drawid`), `shader dump <dir>|override <dir>|off|reload` (the generated WGSL as `<hash>.wgsl` plus `index.tsv`, also `MP_WGSL_DUMP`; compile edited copies in place of the generated ones, also `MP_WGSL_OVERRIDE`; see `docs/DEBUGGING.md` "Shaders"), `gputimes on|off|show` (per-render-pass GPU times from timestamp queries, 60-frame averages: ms and passes per frame for each pass name, plus the total and first-begin-to-last-end span; also F1 > Debug > Remastered "GPU pass times"; free while off), `stats` (the last frame's draws and buffers, the heap, room geometry and environments), `hdfont [on|off]`, `touchpad [attach|detach|stick <x> <y>]` (a virtual gamepad of the kind Android's touch overlay uses, to test controller hotplug against it on any platform), `minimap` (the minimap's screen rect as 0..1 fractions of the window, top-left origin, or `invalid` when it is not drawn: morph ball, map screen, hidden HUD), `maptap` (queues one Z press, as a tap on the minimap does on Android), `mappan <dx> <dy> [hold s]` (drags the open map screen by dx,dy dp, as a finger would), `mapzoom <ratio>` (pinch zoom of the open map screen; above 1 zooms in), `maprotate <degrees>` (twist of the open map screen's yaw; positive is clockwise), `freecam [on|off|freeze on|off|player on|off|speed <n>|pos <x> <y> <z>|look <yaw> <pitch>]` (see below), `timer <0|1>`, `igt <seconds>`, `livesplit <0|1> | addr <host:port> | send <command> | status`, `discord <0|1> | id <application id> | status`, `gci list | import <path> | export <dir or .raw> | dolphin import|export`, `ap [connect <server> <slot> [password] | disconnect | recent | resume <n> | say <text> | chat]`, `wait <frames>`, `quit`; `help` lists them. Ids are hex editor ids, `u<n>`
   unique ids or exact debug names. Every reply ends with `=> ok` or
   `=> err: <why>`, and the client exits 1 if any command failed. Game commands
   run inside the state manager tick, so they fail with "not ticking" on the
@@ -1161,8 +1198,7 @@ other `X:\Users\<name>`: `X:\Users\<user>`); the
   the C stick (or a captured mouse) turns, R is four times as fast, L and Z
   (or the d-pad's down and up) go down and up. `freeze` stops the game's simulation while it flies,
   which also makes two screenshots of one view comparable. Samus's body is
-  drawn where the player stands (`player off` or "Show Samus" hides it). The same page's
-  Rendering section has the console's `view`, `probe`, `hdfont`, `roomgeo` and
+  drawn where the player stands (`player off` or "Show Samus" hides it). The Debug page's Remastered section has the console's `view`, `probe`, `hdfont`, `roomgeo` and
   `roomenv` switches.
 - `MP_PBR_PROBE=<off|on|mirror|window>` (or 0-3): the reflection probe PBR mod
   materials reflect, on by default. The console's `probe` changes it live.
@@ -1183,22 +1219,22 @@ other `X:\Users\<name>`: `X:\Users\<user>`); the
   when a mod has room geometry (6 on Android, 2 with `MP_ROOM_GEO_RESIDENT=1`).
   A frame that outgrows them aborts with a buffer overflow.
 - `MP_ROOM_GEO_RESIDENT=<0|1>` (setting `room_geo_resident`, F1 > Remastered >
-  Rendering > Keep on the GPU; off by default, read at startup):
+  Room models > Keep on the GPU; off by default, read at startup):
   experimental. Each room geometry model's vertex arrays and display lists are
   uploaded to the GPU once when it loads and drawn from there, instead of being
   copied into the frame's buffers every frame. The frame buffers then start at 2
   times the usual size instead of 12 (6 on Android), and 256 MiB (128 on
   Android) is set aside on the GPU for the models, two fifths each for vertices
   and arrays and a fifth for indices: `MP_ROOM_GEO_RESIDENT_MB=<16..2048>` sets
-  that. Console `stats` and F1 > Debug > Frame show how much of it is in use. A
+  that. Console `stats` and the F1 > Debug > Rendering frame statistics show how much of it is in use. A
   model that finds no room left is sent every frame as before, which can
   overflow the smaller frame buffers: raise the room if the log warns of it.
 - `MP_ROOM_GEO_MIN_PX=<n>` (setting `room_geo_min_px`, F1 > Remastered >
-  Rendering > Skip small models, console `roomgeo minpx <n>`; default 0): leaves out room
+  Room models > Skip small models, console `roomgeo minpx <n>`; default 0): leaves out room
   geometry instances that span fewer than n pixels of the game's 480-line
   screen.
 - `MP_ROOM_GEO_LOD=<scale>` (setting `room_geo_lod`, F1 > Remastered >
-  Rendering > Detail distance, console `roomgeo lod <scale>`;
+  Room models > Detail distance, console `roomgeo lod <scale>`;
   default 1): the import also converts each room model's coarser Remastered
   levels of detail (a level is kept only when it has at most 3/4 of the
   triangles of the one before) and lists them in `roomgeo/lods.bin`. An
@@ -1216,7 +1252,7 @@ other `X:\Users\<name>`: `X:\Users\<user>`); the
   the Landing Site's 4133 instances become 188 merged models and 176 single
   ones. A phone pays for every draw on each screen tile, so this took a POCO F8
   Ultra from 24 to 35 fps there. Needs the mod's CMDLs stored uncompressed.
-  F1 > Remastered > Rendering > Draw merged copies (not saved)
+  F1 > Debug > Remastered > Draw merged copies (not saved)
   switches back to single draws at runtime, to compare how they look.
 - `MP_ROOM_LIQUID=0`: ignore the mods' `.roomliquid` files and draw the
   retail fluid planes (console `roomliquid [on|off]`, which also counts what is
@@ -1277,8 +1313,8 @@ other `X:\Users\<name>`: `X:\Users\<user>`); the
   and takes no area lights (Remastered has no lightmaps; this grid is its room
   lighting). `MP_ROOM_ENV_VOLUME=0` goes back to the area's lights, as does
   `MP_ROOM_GEO_AREA_LIGHTS=1`. For tuning: `MP_ROOM_ENV_VOLUME_BIAS` (metres off
-  the surface a sample is taken, default 0.25) and `MP_ROOM_ENV_VOLUME_SHOW`
-  (1 draws the texture coordinates, 2 the light alone, 3 the shading normal).
+  the surface a sample is taken; default 0, as Remastered samples at the
+  surface) and `MP_ROOM_ENV_VOLUME_SHOW` (1 draws the texture coordinates, 2 the light alone, 3 the shading normal).
 - `tools/pbr_shots.py`: contact sheets of models under PBR, for comparing mod
   builds. One game per (variant, place), each booted straight into the room
   with `MP_BOOT_WORLD` on its own console port and an Xvfb display, about 10 s
@@ -1291,7 +1327,7 @@ other `X:\Users\<name>`: `X:\Users\<user>`); the
   `build/fm-smoke`) and `MP_ISO` or `--iso`. Do not use `MP_SMOKE_WORLD` for
   this: it starts a new game and only warps once the Frigate intro has played.
 - `MP_TOUCH_UI=1`: force the page layout for the debug overlay even when
-  Render > "Overlay as a floating window" is set. The page layout is the default
+  System > Overlay > "Overlay as a floating window" is set. The page layout is the default
   everywhere (the only one on Android): a full-screen window inside the safe
   area, with a page list instead of tabs, larger hit targets, drag-to-scroll
   with fling for touches and a Close button.
@@ -1300,8 +1336,7 @@ other `X:\Users\<name>`: `X:\Users\<user>`); the
   60 is console-accurate; higher values step the game logic at the display rate
   instead of interpolating the camera. `MP_SIM_ADAPTIVE=1` instead takes one
   step per frame with `dt` = the measured frame time (clamped 30–480 Hz), so a
-  variable frame rate is matched exactly. Both are also settable from the F1
-  Performance tab and persisted. See `docs/HIGH_FPS_AUDIT.md` for what still
+  variable frame rate is matched exactly. Both are also settable from F1 > Video > Frame rate and persisted. See `docs/HIGH_FPS_AUDIT.md` for what still
   assumes 60 Hz.
 
 The simulation uses a fixed-step accumulator (60 Hz by default) independently of
@@ -1311,7 +1346,7 @@ wall-clock/device consumption.
 Fractional simulation time is retained through frame jitter. The capped scheduler
 can borrow at most 0.25 ms near a tick boundary and carries that debt forward, so
 it does not alternate zero/two ticks merely due to microsecond sleep jitter.
-The Performance tab distinguishes the **60 FPS target** from measured render FPS
+The Video > Frame rate page distinguishes the **60 FPS target** from measured render FPS
 and simulation ticks/second. `MP_TRACE_TIMING=1` logs both rates once per second.
 Hidden windows continue pumping events and main-thread audio without recording
 rendered frames. Restart-to-menu rebuilds the game architecture instead of
@@ -1324,8 +1359,7 @@ simulation camera, then restore the world view before world-space effects. This
 keeps the viewmodel stable instead of mixing an interpolated view with a cached
 60 Hz gun transform. Weapon animation and projectile simulation remain 60 Hz.
 
-Per-frame look (`frame_interpolation`, F1 Performance "Per-frame look
-(uncapped)", on by default) turns the presented view every rendered frame by the
+Per-frame look (`frame_interpolation`, "Per-frame look (uncapped)" on F1 > Video > Frame rate, on by default) turns the presented view every rendered frame by the
 look input the next tick will consume: pending mouse and gyro deltas, plus
 twin-stick velocity times the time since the tick. The tick still applies the
 whole amount, so aim and shots are unchanged; the free-aim crosshair is rotated
@@ -1333,21 +1367,21 @@ with the view so it stays centred. It only applies with the frame limiter off,
 under free mouse look (mouse aim, gyro aim or twin stick). The game's own stick
 look is not previewed.
 
-Smooth actor motion (`actor_interpolation`, F1 Performance, off by default,
+Smooth actor motion (`actor_interpolation`, F1 > Video > Frame rate, off by default,
 experimental) draws each moving actor, Samus and the morph ball included,
 between its last two tick transforms when the frame limiter is off. Moves of
 more than 4 units or 45° in a tick snap. The arm cannon's bob and sway blend
 too. Queued particles, shadows and the HUD sway still step at 60 Hz. `docs/FRAME_INTERPOLATION.md` has the design and scopes the rest
 (particles, projectiles).
 
-Smooth animation (`pose_interpolation`, F1 Performance, off by default,
+Smooth animation (`pose_interpolation`, F1 > Video > Frame rate, off by default,
 experimental) skins animated models with a per-bone blend of the poses built on
 the last two ticks when the frame limiter is off. The animation tree is not
 touched, so events, sounds and particles are unchanged; attachments on locators
 and swarms stay on the tick pose. A bone that turns more than 45° or moves more
 than 4 units in a tick snaps the whole pose.
 
-Smooth particles (`particle_interpolation`, F1 Performance, off by default,
+Smooth particles (`particle_interpolation`, F1 > Video > Frame rate, off by default,
 experimental) draws particle effects, projectile effects included, between
 their last two 60 Hz positions when the frame limiter is off, using the game's
 own sub-frame particle path. Beam trails (swooshes), electric effects and
@@ -1426,7 +1460,7 @@ mouse scenario.
 other than the current one, jumps to another world through the same restart path
 the in-game world teleporters use. It waits for gameplay, requests the jump, and
 reports `[world-smoke] passed: world <id> area <n>` once a freshly constructed
-world is running. The F1 debug overlay's Debug tab (with Show cheats ticked)
+world is running. The F1 overlay's Debug > Cheats page (with Show cheats ticked)
 lists every world by its front-end name and jumps to it on click.
 
 `MP_SMOKE_ELEVATOR=<ticks>` rides the elevator most recently loaded in the current world
@@ -1489,7 +1523,7 @@ For stuck or unexpected sounds, `MP_LOG_VOICES=1` logs the active MusyX voices
 listener heading) about three times a second, and `MP_MUTE_SMP=65535,93` silences
 voices by sample id so a persistent one can be identified by ear. Streamed
 voices report sample id 65535. `MP_LOG_3D=1` logs any 3D emitter whose Doppler
-factor is not 1. The overlay's **Voices** tab lists the live voices (loudest
+factor is not 1. The overlay's Debug > Audio > **Sounds playing** list shows the live voices (loudest
 first) with a per-sample mute checkbox and an "Unmute all" button; the muted ids
 are saved to `voices_muted` in the settings file.
 

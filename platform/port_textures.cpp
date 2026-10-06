@@ -26,12 +26,12 @@ namespace {
 struct Layer {
   const char* label;
   int32_t priority;
-  std::string root;
+  std::string root{};
   // Served from the executable's built-in set (PortEmbedded) instead of `root`.
   bool embedded = false;
-  aurora::texture::ReplacementGroup group;
+  aurora::texture::ReplacementGroup group{};
   // The folder the registrations came from; empty when nothing is loaded.
-  std::filesystem::path dir;
+  std::filesystem::path dir{};
   bool loaded = false;
 };
 

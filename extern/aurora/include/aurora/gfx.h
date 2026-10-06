@@ -2,10 +2,12 @@
 #define AURORA_GFX_H
 
 #ifdef __cplusplus
+#include <cstddef>
 #include <cstdint>
 
 extern "C" {
 #else
+#include "stddef.h"
 #include "stdint.h"
 #endif
 
@@ -45,6 +47,9 @@ uint64_t aurora_get_resident_geometry_used();
 float aurora_get_fps();
 // Whether the device samples BC and ASTC 4x4 compressed textures (false until it exists).
 void aurora_get_texture_support(bool* bc, bool* astc);
+// A GX texture object's (GXTexObj*) base level decoded to RGBA8 into `out` (cap bytes); false for
+// palette or compressed PC formats and when it does not fit.
+bool aurora_gx_texobj_rgba8(const void* obj, uint32_t* width, uint32_t* height, uint8_t* out, size_t cap);
 
 void aurora_enable_vsync(bool enabled);
 

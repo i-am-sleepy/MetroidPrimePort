@@ -3,6 +3,7 @@
 // retrotool/lib/src/format/) and of the decoding half of `retrotool cmdl convert`.
 
 #include "port_remastered_cmdl.h"
+#include "port_bytes.h"
 
 #include <cstring>
 #include <functional>
@@ -12,20 +13,10 @@ namespace {
 
 // Every scalar in the format is little endian and the vertex data is interleaved
 // without guarantees worth trusting, so all reads go through these.
-uint16_t ReadLE16(const uint8_t* p) { return uint16_t(p[0]) | uint16_t(uint16_t(p[1]) << 8); }
-
-uint32_t ReadLE32(const uint8_t* p) {
-  return uint32_t(p[0]) | (uint32_t(p[1]) << 8) | (uint32_t(p[2]) << 16) | (uint32_t(p[3]) << 24);
-}
-
-uint64_t ReadLE64(const uint8_t* p) { return uint64_t(ReadLE32(p)) | (uint64_t(ReadLE32(p + 4)) << 32); }
-
-float ReadLEFloat(const uint8_t* p) {
-  const uint32_t bits = ReadLE32(p);
-  float value = 0.0f;
-  std::memcpy(&value, &bits, sizeof(value));
-  return value;
-}
+using port::ReadLE16;
+using port::ReadLE32;
+using port::ReadLE64;
+using port::ReadLEFloat;
 
 // An IEEE half, the width most of the Remastered vertex data uses, widened to
 // float. Exact, so the result matches any other correct decoder bit for bit.

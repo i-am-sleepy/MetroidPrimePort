@@ -131,6 +131,11 @@ void CDolphinController::ReadDevices() {
     if ((alt & PAD_TRIGGER_L) && status[0].triggerL < 150) status[0].triggerL = 150;
     if ((alt & PAD_TRIGGER_R) && status[0].triggerR < 150) status[0].triggerR = 150;
   }
+  // A touch-overlay minimap tap: one poll of Z held, released on the next.
+  if (PortDebug::ConsumeMapTapZ()) {
+    status[0].err = PAD_ERR_NONE;
+    status[0].button |= PAD_TRIGGER_Z;
+  }
   // The beam shift, bound in the Controls tab (left shift by default).
   const bool shiftHeld = mouseShift || PortControls::ShiftHeld();
   for (int i = 0; i < 4; ++i) {

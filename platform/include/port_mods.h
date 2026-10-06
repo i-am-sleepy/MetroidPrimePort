@@ -71,7 +71,7 @@ struct Segment {
   uint64_t length = 0;
   size_t memory = 0;         // kMemory: index into VirtualFile::memory
   uint64_t sourceOffset = 0; // kSource, kHost: where the segment starts in its file
-  std::string hostPath;      // kHost: read from this file, zeros past hostSize
+  std::string hostPath{};    // kHost: read from this file, zeros past hostSize
   uint64_t hostSize = 0;
 };
 

@@ -1,4 +1,5 @@
 #include "port_actor_collision_bounds.h"
+#include "port_bytes.h"
 
 #include <algorithm>
 #include <cmath>
@@ -34,17 +35,8 @@ constexpr uint32_t kMaxResourceBytes = 64u << 20;
 // the disc's largest models.
 constexpr float kMaxExtent = 1.0e6f;
 
-uint32_t ReadBE32(const uint8_t* data) {
-  return uint32_t(data[0]) << 24 | uint32_t(data[1]) << 16 | uint32_t(data[2]) << 8 | uint32_t(data[3]);
-}
-
-float ReadBEFloat(const uint8_t* data) {
-  const uint32_t bits = ReadBE32(data);
-  float value = 0.f;
-  static_assert(sizeof(value) == sizeof(bits), "float is not 32 bits");
-  std::memcpy(&value, &bits, sizeof(value));
-  return value;
-}
+using port::ReadBE32;
+using port::ReadBEFloat;
 
 bool SaneBox(const float bounds[6]) {
   for (uint32_t i = 0; i < 6; ++i) {

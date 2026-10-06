@@ -1,4 +1,5 @@
 #include "port_remastered_text.h"
+#include "port_bytes.h"
 
 #include <algorithm>
 #include <cstring>
@@ -9,16 +10,11 @@ namespace {
 constexpr uint32_t kStrgMagic = 0x87654321;
 constexpr uint32_t kEnglish = 0x454E474C;  // 'ENGL'
 
-uint16_t Le16(const uint8_t* p) { return uint16_t(p[0] | p[1] << 8); }
-uint32_t Le32(const uint8_t* p) { return uint32_t(p[0]) | uint32_t(p[1]) << 8 | uint32_t(p[2]) << 16 | uint32_t(p[3]) << 24; }
-uint64_t Le64(const uint8_t* p) { return uint64_t(Le32(p)) | uint64_t(Le32(p + 4)) << 32; }
-uint32_t Be32(const uint8_t* p) { return uint32_t(p[0]) << 24 | uint32_t(p[1]) << 16 | uint32_t(p[2]) << 8 | uint32_t(p[3]); }
-
-void PutBe32(std::vector<uint8_t>& out, uint32_t value) {
-  for (int shift = 24; shift >= 0; shift -= 8) {
-    out.push_back(uint8_t(value >> shift));
-  }
-}
+using port::AppendBE32;
+using port::ReadBE32;
+using port::ReadLE16;
+using port::ReadLE32;
+using port::ReadLE64;
 
 // One "MsgStdBn" file: a 32 byte header, then sections of a 16 byte header
 // (name, size) and their data, each padded to 16 bytes.
@@ -32,7 +28,7 @@ bool ParseMessages(const uint8_t* data, size_t size, std::vector<TextEntry>& out
   size_t labelsSize = 0;
   size_t textsSize = 0;
   for (size_t at = 0x20; at + 16 <= size;) {
-    const size_t length = Le32(data + at + 4);
+    const size_t length = ReadLE32(data + at + 4);
     if (length > size - at - 16) {
       error = "a section runs past the end";
       return false;
@@ -50,7 +46,7 @@ bool ParseMessages(const uint8_t* data, size_t size, std::vector<TextEntry>& out
     error = "no labels or no text";
     return false;
   }
-  const size_t count = Le32(texts);
+  const size_t count = ReadLE32(texts);
   if (count > (textsSize - 4) / 4) {
     error = "the text table is cut short";
     return false;
@@ -58,15 +54,15 @@ bool ParseMessages(const uint8_t* data, size_t size, std::vector<TextEntry>& out
   const size_t first = out.size();
   out.resize(first + count);
   for (size_t i = 0; i < count; ++i) {
-    const size_t begin = Le32(texts + 4 + 4 * i);
-    const size_t end = i + 1 < count ? Le32(texts + 8 + 4 * i) : textsSize;
+    const size_t begin = ReadLE32(texts + 4 + 4 * i);
+    const size_t end = i + 1 < count ? ReadLE32(texts + 8 + 4 * i) : textsSize;
     if (begin > end || end > textsSize) {
       error = "a text offset is out of range";
       return false;
     }
     std::u16string& text = out[first + i].text;
     for (size_t p = begin; p + 2 <= end; p += 2) {
-      text.push_back(char16_t(Le16(texts + p)));
+      text.push_back(char16_t(ReadLE16(texts + p)));
     }
     // The terminator; a zero inside a tag's payload is not one, so only the last counts.
     if (!text.empty() && text.back() == 0) {
@@ -74,21 +70,21 @@ bool ParseMessages(const uint8_t* data, size_t size, std::vector<TextEntry>& out
     }
   }
   // Hash slots of (count, offset), each a run of: length, name, text index.
-  const size_t slots = Le32(labels);
+  const size_t slots = ReadLE32(labels);
   if (slots > (labelsSize - 4) / 8) {
     error = "the label table is cut short";
     return false;
   }
   for (size_t s = 0; s < slots; ++s) {
-    const size_t labelCount = Le32(labels + 4 + 8 * s);
-    size_t at = Le32(labels + 8 + 8 * s);
+    const size_t labelCount = ReadLE32(labels + 4 + 8 * s);
+    size_t at = ReadLE32(labels + 8 + 8 * s);
     for (size_t l = 0; l < labelCount; ++l) {
       if (at >= labelsSize || labels[at] + size_t(5) > labelsSize - at) {
         error = "a label is out of range";
         return false;
       }
       const size_t length = labels[at];
-      const size_t index = Le32(labels + at + 1 + length);
+      const size_t index = ReadLE32(labels + at + 1 + length);
       if (index < count) {
         out[first + index].label.assign(reinterpret_cast<const char*>(labels + at + 1), length);
       }
@@ -260,11 +256,11 @@ bool ParseMsbt(const uint8_t* data, size_t size, const char* language, std::vect
     return false;
   }
   // The form's length leaves out its header; what follows it is the extractor's footer.
-  const uint64_t form = Le64(data + 4);
+  const uint64_t form = ReadLE64(data + 4);
   const size_t end = form < size - 0x20 ? size_t(form) + 0x20 : size;
   // Chunks of a 24 byte header: the language, the length, a version and a skip.
   for (size_t at = 0x20; at + 24 <= end;) {
-    const uint64_t length = Le64(data + at + 4);
+    const uint64_t length = ReadLE64(data + at + 4);
     if (length > end - at - 24) {
       error = "a language runs past the end";
       return false;
@@ -441,11 +437,11 @@ bool MergeStringTable(const uint8_t* retail, size_t size, const TableText& text,
                       int& reworded, int& translated) {
   reworded = 0;
   translated = 0;
-  if (size < 16 || Be32(retail) != kStrgMagic || Be32(retail + 4) != 0) {
+  if (size < 16 || ReadBE32(retail) != kStrgMagic || ReadBE32(retail + 4) != 0) {
     return false;
   }
-  const size_t languages = Be32(retail + 8);
-  const size_t count = Be32(retail + 12);
+  const size_t languages = ReadBE32(retail + 8);
+  const size_t count = ReadBE32(retail + 12);
   if (languages > (size - 16) / 8 || count > size / 4) {
     return false;
   }
@@ -455,8 +451,8 @@ bool MergeStringTable(const uint8_t* retail, size_t size, const TableText& text,
   std::vector<std::vector<std::u16string>> tables(languages);
   size_t english = languages;
   for (size_t l = 0; l < languages; ++l) {
-    codes.push_back(Be32(retail + 16 + 8 * l));
-    const size_t offset = Be32(retail + 20 + 8 * l);
+    codes.push_back(ReadBE32(retail + 16 + 8 * l));
+    const size_t offset = ReadBE32(retail + 20 + 8 * l);
     if (offset > size - base || 4 + 4 * count > size - base - offset) {
       return false;
     }
@@ -464,7 +460,7 @@ bool MergeStringTable(const uint8_t* retail, size_t size, const TableText& text,
     const size_t room = size - base - offset - 4;
     for (size_t s = 0; s < count; ++s) {
       std::u16string string;
-      for (size_t p = Be32(table + 4 * s);; p += 2) {
+      for (size_t p = ReadBE32(table + 4 * s);; p += 2) {
         if (p + 2 > room) {
           return false;
         }
@@ -566,14 +562,14 @@ bool MergeStringTable(const uint8_t* retail, size_t size, const TableText& text,
     return false;
   }
   out.clear();
-  PutBe32(out, kStrgMagic);
-  PutBe32(out, 0);
-  PutBe32(out, uint32_t(tables.size()));
-  PutBe32(out, uint32_t(count));
+  AppendBE32(out, kStrgMagic);
+  AppendBE32(out, 0);
+  AppendBE32(out, uint32_t(tables.size()));
+  AppendBE32(out, uint32_t(count));
   size_t offset = 0;
   for (size_t l = 0; l < tables.size(); ++l) {
-    PutBe32(out, codes[l]);
-    PutBe32(out, uint32_t(offset));
+    AppendBE32(out, codes[l]);
+    AppendBE32(out, uint32_t(offset));
     offset += 4 + 4 * count;
     for (const std::u16string& text : tables[l]) {
       offset += 2 * (text.size() + 1);
@@ -584,10 +580,10 @@ bool MergeStringTable(const uint8_t* retail, size_t size, const TableText& text,
     for (const std::u16string& text : tables[l]) {
       length += 2 * (text.size() + 1);
     }
-    PutBe32(out, uint32_t(length));
+    AppendBE32(out, uint32_t(length));
     size_t at = 4 * count;
     for (const std::u16string& text : tables[l]) {
-      PutBe32(out, uint32_t(at));
+      AppendBE32(out, uint32_t(at));
       at += 2 * (text.size() + 1);
     }
     for (const std::u16string& text : tables[l]) {

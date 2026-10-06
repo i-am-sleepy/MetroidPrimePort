@@ -496,6 +496,9 @@ static void fill_uniform(ByteBuffer& buf, const ShaderInfo& info) noexcept {
     for (const auto& v : g_gxState.pbrLightHdr) {
       buf.append(v);
     }
+    for (const auto& v : g_gxState.pbrShield) {
+      buf.append(v);
+    }
   }
   if (info.usesPTTexMtx.any()) {
     for (int i = 0; i < info.usesPTTexMtx.size(); ++i) {

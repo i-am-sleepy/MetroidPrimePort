@@ -1,6 +1,9 @@
 // Liquid surfaces at run time: which areas have a file, their meshes and models, and the
 // draw. See port_room_liquid.h.
+#include "port_env.h"
 #include "port_room_liquid.h"
+#include "port_strings.h"
+#include "port_bytes.h"
 
 #include "port_gci.h"
 #include "port_log.h"
@@ -89,49 +92,18 @@ int sDrawn = 0;
 int sDrawnLast = 0;
 float sClock = 0.f; // Advance
 
-int HexDigit(char c) {
-  if (c >= '0' && c <= '9') {
-    return c - '0';
-  }
-  if (c >= 'a' && c <= 'f') {
-    return c - 'a' + 10;
-  }
-  if (c >= 'A' && c <= 'F') {
-    return c - 'A' + 10;
-  }
-  return -1;
-}
+using port::HexDigit;
 
 // The whole file, in one read when its size is known. The stream is left as a read
 // through istreambuf_iterator leaves it: failed only when the file did not open.
-std::vector< uint8_t > ReadAll(std::ifstream& in) {
-  std::vector< uint8_t > data;
-  if (!in) {
-    return data;
-  }
-  in.seekg(0, std::ios::end);
-  const std::streamoff size = in.tellg();
-  in.seekg(0, std::ios::beg);
-  if (in && size > 0) {
-    data.resize(size_t(size));
-    in.read(reinterpret_cast< char* >(data.data()), std::streamsize(size));
-    data.resize(size_t(in.gcount()));
-  } else {
-    in.clear();
-    data.assign(std::istreambuf_iterator< char >(in), std::istreambuf_iterator< char >());
-  }
-  in.clear();
-  return data;
-}
+using port::ReadAll;
 
-uint32_t ReadU32(const uint8_t* p) {
-  return uint32_t(p[0]) | uint32_t(p[1]) << 8 | uint32_t(p[2]) << 16 | uint32_t(p[3]) << 24;
-}
+using port::ReadLE32;
 
 // Reads `count` floats at `p`, moving it on; false when one is not finite.
 bool ReadFloats(const uint8_t*& p, float* out, size_t count) {
   for (size_t i = 0; i < count; ++i, p += 4) {
-    const uint32_t bits = ReadU32(p);
+    const uint32_t bits = ReadLE32(p);
     std::memcpy(&out[i], &bits, 4);
     if (!std::isfinite(out[i])) {
       return false;
@@ -451,42 +423,22 @@ bool DrawLava(Placed& item, const CStateManager& mgr, const CGameArea& gameArea,
 } // namespace
 
 bool ParseFileName(const std::string& fileName, uint32_t& id) {
-  static const char kSuffix[] = ".roomliquid";
-  const size_t suffix = sizeof(kSuffix) - 1;
-  if (fileName.size() != 8 + suffix) {
-    return false;
-  }
-  for (size_t i = 0; i < suffix; ++i) {
-    const char c = fileName[8 + i];
-    if ((c >= 'A' && c <= 'Z' ? char(c - 'A' + 'a') : c) != kSuffix[i]) {
-      return false;
-    }
-  }
-  uint32_t value = 0;
-  for (size_t i = 0; i < 8; ++i) {
-    const int digit = HexDigit(fileName[i]);
-    if (digit < 0) {
-      return false;
-    }
-    value = value << 4 | uint32_t(digit);
-  }
-  id = value;
-  return true;
+  return port::ParseHexFileName(fileName, ".roomliquid", id);
 }
 
 bool Parse(const std::vector< uint8_t >& data, std::vector< Surface >& out, std::vector< Filter >& filters,
            std::string& error) {
   out.clear();
   filters.clear();
-  if (data.size() < kHeaderBytes || ReadU32(data.data()) != kMagic) {
+  if (data.size() < kHeaderBytes || ReadLE32(data.data()) != kMagic) {
     error = "not a room liquid file";
     return false;
   }
-  if (ReadU32(data.data() + 4) != kVersion) {
+  if (ReadLE32(data.data() + 4) != kVersion) {
     error = "unknown version";
     return false;
   }
-  const size_t count = ReadU32(data.data() + 8);
+  const size_t count = ReadLE32(data.data() + 8);
   const uint8_t* p = data.data() + kHeaderBytes;
   const uint8_t* const end = data.data() + data.size();
   auto fail = [&](const char* why) {
@@ -503,8 +455,8 @@ bool Parse(const std::vector< uint8_t >& data, std::vector< Surface >& out, std:
     if (size_t(end - p) < kSurfaceBytes) {
       return fail("truncated");
     }
-    s.type = ReadU32(p);
-    s.model = ReadU32(p + 4);
+    s.type = ReadLE32(p);
+    s.model = ReadLE32(p + 4);
     p += 8;
     if (s.type > 2) {
       return fail("unknown surface type");
@@ -519,8 +471,8 @@ bool Parse(const std::vector< uint8_t >& data, std::vector< Surface >& out, std:
       return fail("truncated");
     }
     Water& w = s.water;
-    const uint32_t vertices = ReadU32(p);
-    const uint32_t indices = ReadU32(p + 4);
+    const uint32_t vertices = ReadLE32(p);
+    const uint32_t indices = ReadLE32(p + 4);
     p += 8;
     bool finite = ReadFloats(p, w.boundsMin, 3) && ReadFloats(p, w.boundsMax, 3);
     std::memcpy(w.features, p, sizeof(w.features));
@@ -532,11 +484,11 @@ bool Parse(const std::vector< uint8_t >& data, std::vector< Surface >& out, std:
     if (!finite) {
       return fail("a water value is not finite");
     }
-    w.normalMap = ReadU32(p);
-    w.flowMap = ReadU32(p + 4);
-    w.rainNoise = ReadU32(p + 8);
-    w.rainNoiseWidth = ReadU32(p + 12);
-    w.rainNoiseHeight = ReadU32(p + 16);
+    w.normalMap = ReadLE32(p);
+    w.flowMap = ReadLE32(p + 4);
+    w.rainNoise = ReadLE32(p + 8);
+    w.rainNoiseWidth = ReadLE32(p + 12);
+    w.rainNoiseHeight = ReadLE32(p + 16);
     p += 20;
     if (indices % 3 != 0) {
       return fail("indices are not triangles");
@@ -554,7 +506,7 @@ bool Parse(const std::vector< uint8_t >& data, std::vector< Surface >& out, std:
     }
     w.indices.resize(indices);
     for (uint32_t& index : w.indices) {
-      index = ReadU32(p);
+      index = ReadLE32(p);
       p += 4;
       if (index >= vertices) {
         return fail("an index is out of range");
@@ -564,7 +516,7 @@ bool Parse(const std::vector< uint8_t >& data, std::vector< Surface >& out, std:
   if (size_t(end - p) < 4) {
     return fail("truncated");
   }
-  const size_t filterCount = ReadU32(p);
+  const size_t filterCount = ReadLE32(p);
   p += 4;
   if (filterCount > size_t(end - p) / kFilterBytes) {
     return fail("truncated");
@@ -690,8 +642,7 @@ void SetEnabled(bool enabled) {
 
 bool Enabled() {
   if (sEnabled < 0) {
-    const char* const env = std::getenv("MP_ROOM_LIQUID");
-    sEnabled = env != nullptr && env[0] == '0' ? 0 : 1;
+    sEnabled = port::EnvFlag("MP_ROOM_LIQUID", true) ? 1 : 0;
   }
   return sEnabled != 0;
 }

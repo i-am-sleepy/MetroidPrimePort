@@ -1,5 +1,6 @@
 // Room geometry at run time: which areas have a file, their models, and the draw. See
 // port_room_geo.h.
+#include "port_env.h"
 #include "port_room_geo.h"
 #include "port_room_sky.h"
 
@@ -617,7 +618,7 @@ std::vector< uint8_t > ReadCmdlFile(uint32_t id) {
 // goes in one (see Draw for what can still leave a cluster's copies drawn one by one).
 void BuildClusters(Area& area) {
   area.clustered = true;
-  if (const char* env = std::getenv("MP_ROOM_GEO_MERGE"); env != nullptr && std::strcmp(env, "0") == 0) {
+  if (!port::EnvFlag("MP_ROOM_GEO_MERGE", true)) {
     return; // to compare against
   }
   std::vector< size_t > copies(area.models.size(), 0);
@@ -2119,7 +2120,7 @@ void Reset() {
 
 bool AreaLights() {
   if (sAreaLights < 0) {
-    sAreaLights = std::getenv("MP_ROOM_GEO_AREA_LIGHTS") != nullptr ? 1 : 0;
+    sAreaLights = port::EnvFlag("MP_ROOM_GEO_AREA_LIGHTS") ? 1 : 0;
   }
   return sAreaLights != 0;
 }
@@ -2128,8 +2129,7 @@ void SetAreaLights(bool on) { sAreaLights = on ? 1 : 0; }
 
 float MinPixels() {
   if (sMinPixels < 0.f) {
-    const char* const env = std::getenv("MP_ROOM_GEO_MIN_PX");
-    sMinPixels = env != nullptr ? std::max(0.f, float(std::atof(env))) : 0.f;
+    sMinPixels = std::max(0.f, port::EnvFloat("MP_ROOM_GEO_MIN_PX", 0.f));
   }
   return sMinPixels;
 }
@@ -2138,8 +2138,7 @@ void SetMinPixels(float pixels) { sMinPixels = std::max(0.f, pixels); }
 
 float LodDistance() {
   if (sLodDistance < 0.f) {
-    const char* const env = std::getenv("MP_ROOM_GEO_LOD");
-    sLodDistance = env != nullptr ? std::max(0.f, float(std::atof(env))) : 1.f;
+    sLodDistance = std::max(0.f, port::EnvFloat("MP_ROOM_GEO_LOD", 1.f));
   }
   return sLodDistance;
 }

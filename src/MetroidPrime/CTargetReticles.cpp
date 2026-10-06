@@ -1193,7 +1193,7 @@ void CCompoundTargetReticle::DrawOrbitZoneGroup(const CMatrix3f& rot,
 
     float scale = x1e8_crosshairsScale;
 #ifdef TARGET_PC
-    if (PortDebug::MouseAim() || PortDebug::TwinStick()) {
+    if (PortDebug::DirectAim()) {
       scale *= static_cast< float >(PortDebug::CrosshairSize()) / 100.f;
     }
 #endif

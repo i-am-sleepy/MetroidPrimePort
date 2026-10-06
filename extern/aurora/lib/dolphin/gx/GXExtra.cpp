@@ -491,6 +491,24 @@ void GXSetPBRBacklight(const f32 plane[4], const f32 backDir[3], f32 back, f32 t
   }
 }
 
+void GXSetPBRShield(const f32 rows[8][4]) {
+  struct Write {
+    f32 values[32];
+  };
+  static LastPBRWrite<Write> sLast;
+  Write now{};
+  if (rows != nullptr) {
+    std::memcpy(now.values, rows, sizeof(now.values));
+  }
+  if (sLast.repeats(now)) {
+    return;
+  }
+  GX_WRITE_AURORA(GX_AURORA_SET_PBR_SHIELD);
+  for (f32 v : now.values) {
+    GX_WRITE_F32(v);
+  }
+}
+
 void GXSetPBRLightHdr(GXLightID light, const f32 color[3], const f32 viewPos[3], f32 r0, f32 r1, u32 falloff) {
   const u32 bit = static_cast<u32>(light) & 0xFF;
   if (bit == 0) {

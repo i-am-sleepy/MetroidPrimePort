@@ -31,7 +31,9 @@ struct SView {
   std::unique_ptr< CModelData > model;
 };
 
-SView sView;
+// Never destroyed: a static SView's model would be freed during static teardown, after the
+// resource pool and PortMods' texture table it unbinds from are already gone.
+SView& sView = *new SView;
 
 } // namespace
 

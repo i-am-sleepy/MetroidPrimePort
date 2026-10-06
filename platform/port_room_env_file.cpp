@@ -1,5 +1,7 @@
 // The .roomenv file: parsing, and picking the probe for a point. See port_room_env.h.
 #include "port_room_env.h"
+#include "port_strings.h"
+#include "port_bytes.h"
 
 #include <algorithm>
 #include <cmath>
@@ -31,16 +33,8 @@ constexpr size_t kPointSize = 24;
 constexpr uint32_t kMaxGrids = 64;
 constexpr uint32_t kMaxGridSize = 1024;
 
-uint32_t Get32(const uint8_t* p) {
-  return uint32_t(p[0]) | (uint32_t(p[1]) << 8) | (uint32_t(p[2]) << 16) | (uint32_t(p[3]) << 24);
-}
-
-float GetFloat(const uint8_t* p) {
-  const uint32_t bits = Get32(p);
-  float value;
-  std::memcpy(&value, &bits, sizeof(value));
-  return value;
-}
+using port::ReadLE32;
+using port::ReadLEFloat;
 
 float GetHalf(const uint8_t* p) {
   const uint32_t h = uint32_t(p[0]) | (uint32_t(p[1]) << 8);
@@ -75,36 +69,12 @@ uint32_t GradeLutId(const uint8_t* lut) {
   return identity ? 0u : (hash != 0 ? hash : 1u);
 }
 
-int HexDigit(char c) {
-  if (c >= '0' && c <= '9') {
-    return c - '0';
-  }
-  c = char(c | 0x20);
-  return c >= 'a' && c <= 'f' ? c - 'a' + 10 : -1;
-}
+using port::HexDigit;
 
 } // namespace
 
 bool ParseFileName(const std::string& fileName, uint32_t& id) {
-  static const char kSuffix[] = ".roomenv";
-  if (fileName.size() != 8 + sizeof(kSuffix) - 1) {
-    return false;
-  }
-  for (size_t i = 0; i + 1 < sizeof(kSuffix); ++i) {
-    const char c = fileName[8 + i];
-    if ((c >= 'A' && c <= 'Z' ? char(c | 0x20) : c) != kSuffix[i]) {
-      return false;
-    }
-  }
-  id = 0;
-  for (size_t i = 0; i < 8; ++i) {
-    const int digit = HexDigit(fileName[i]);
-    if (digit < 0) {
-      return false;
-    }
-    id = (id << 4) | uint32_t(digit);
-  }
-  return true;
+  return port::ParseHexFileName(fileName, ".roomenv", id);
 }
 
 size_t CubeBytes(uint32_t size, uint32_t mipCount) {
@@ -127,21 +97,21 @@ bool ValidBrdfLut(const std::vector<uint8_t>& data, std::string& error) {
 
 bool Parse(std::vector<uint8_t>&& data, File& out, std::string& error) {
   out = {};
-  if (data.size() < kHeaderSize || Get32(data.data()) != kMagic) {
+  if (data.size() < kHeaderSize || ReadLE32(data.data()) != kMagic) {
     error = "not a room environment";
     return false;
   }
-  const uint32_t version = Get32(data.data() + 4);
+  const uint32_t version = ReadLE32(data.data() + 4);
   if (version == 0 || version > kVersion) {
-    error = "unknown version " + std::to_string(Get32(data.data() + 4));
+    error = "unknown version " + std::to_string(ReadLE32(data.data() + 4));
     return false;
   }
   out.version = version;
   for (int i = 0; i < 4; ++i) {
-    out.tonemap[i] = GetFloat(data.data() + 8 + i * 4);
+    out.tonemap[i] = ReadLEFloat(data.data() + 8 + i * 4);
   }
-  const uint32_t probes = Get32(data.data() + 24);
-  const uint32_t cubes = Get32(data.data() + 28);
+  const uint32_t probes = ReadLE32(data.data() + 24);
+  const uint32_t cubes = ReadLE32(data.data() + 28);
   const size_t probeSize = version >= 8 ? kProbeSize : kProbeSizeV1;
   if (probes > kMaxProbes || cubes > kMaxProbes || data.size() - kHeaderSize < size_t(probes) * probeSize) {
     error = "cut short";
@@ -152,19 +122,19 @@ bool Parse(std::vector<uint8_t>&& data, File& out, std::string& error) {
   for (Probe& probe : out.probes) {
     const uint8_t* p = data.data() + at;
     for (int i = 0; i < 12; ++i) {
-      probe.worldToBox[i] = GetFloat(p + i * 4);
+      probe.worldToBox[i] = ReadLEFloat(p + i * 4);
     }
     for (int i = 0; i < 9; ++i) {
-      probe.worldToCube[i] = GetFloat(p + 48 + i * 4);
+      probe.worldToCube[i] = ReadLEFloat(p + 48 + i * 4);
     }
-    probe.layer = version >= 9 ? int32_t(Get32(p + 84)) : -1;
-    probe.cube = Get32(p + 88);
-    probe.scale = GetFloat(p + 92);
+    probe.layer = version >= 9 ? int32_t(ReadLE32(p + 84)) : -1;
+    probe.cube = ReadLE32(p + 88);
+    probe.scale = ReadLEFloat(p + 92);
     if (version >= 8) {
-      probe.padding = GetFloat(p + 96);
-      probe.priority = int32_t(Get32(p + 100));
-      probe.intensityMin = GetFloat(p + 104);
-      probe.intensityMax = GetFloat(p + 108);
+      probe.padding = ReadLEFloat(p + 96);
+      probe.priority = int32_t(ReadLE32(p + 100));
+      probe.intensityMin = ReadLEFloat(p + 104);
+      probe.intensityMax = ReadLEFloat(p + 108);
       if (!std::isfinite(probe.padding)) {
         probe.padding = 1.f;
       }
@@ -196,10 +166,10 @@ bool Parse(std::vector<uint8_t>&& data, File& out, std::string& error) {
       return false;
     }
     const uint8_t* p = data.data() + at;
-    cube.size = Get32(p);
-    cube.mipCount = Get32(p + 4);
-    cube.isSigned = Get32(p + 8) != 0;
-    cube.length = Get32(p + 12);
+    cube.size = ReadLE32(p);
+    cube.mipCount = ReadLE32(p + 4);
+    cube.isSigned = ReadLE32(p + 8) != 0;
+    cube.length = ReadLE32(p + 12);
     cube.offset = at + kCubeHeaderSize;
     if (cube.size == 0 || cube.size > kMaxCubeSize || (cube.size & (cube.size - 1)) != 0 || cube.mipCount == 0 ||
         cube.mipCount > 11 || (cube.size >> (cube.mipCount - 1)) == 0) {
@@ -217,7 +187,7 @@ bool Parse(std::vector<uint8_t>&& data, File& out, std::string& error) {
       error = "cut short";
       return false;
     }
-    const uint32_t grids = Get32(data.data() + at);
+    const uint32_t grids = ReadLE32(data.data() + at);
     at += 4;
     if (grids > kMaxGrids) {
       error = "too many grids";
@@ -231,7 +201,7 @@ bool Parse(std::vector<uint8_t>&& data, File& out, std::string& error) {
       }
       const uint8_t* p = data.data() + at;
       for (int i = 0; i < 12; ++i) {
-        grid.worldToGrid[i] = GetFloat(p + i * 4);
+        grid.worldToGrid[i] = ReadLEFloat(p + i * 4);
         if (!std::isfinite(grid.worldToGrid[i])) {
           error = "a grid is not finite";
           return false;
@@ -239,7 +209,7 @@ bool Parse(std::vector<uint8_t>&& data, File& out, std::string& error) {
       }
       size_t points = 1;
       for (int i = 0; i < 3; ++i) {
-        grid.size[i] = Get32(p + 48 + i * 4);
+        grid.size[i] = ReadLE32(p + 48 + i * 4);
         if (grid.size[i] == 0 || grid.size[i] > kMaxGridSize) {
           error = "bad grid size";
           return false;
@@ -275,7 +245,7 @@ bool Parse(std::vector<uint8_t>&& data, File& out, std::string& error) {
       return false;
     }
     for (int i = 0; i < 2; ++i) {
-      out.exposure[i] = GetFloat(data.data() + at + i * 4);
+      out.exposure[i] = ReadLEFloat(data.data() + at + i * 4);
     }
     if (!std::isfinite(out.exposure[0]) || !std::isfinite(out.exposure[1]) || out.exposure[1] < out.exposure[0]) {
       out.exposure[0] = out.exposure[1] = 0.f;
@@ -287,8 +257,8 @@ bool Parse(std::vector<uint8_t>&& data, File& out, std::string& error) {
       error = "cut short";
       return false;
     }
-    out.exposureBias = GetFloat(data.data() + at);
-    out.contrast = GetFloat(data.data() + at + 4);
+    out.exposureBias = ReadLEFloat(data.data() + at);
+    out.contrast = ReadLEFloat(data.data() + at + 4);
     if (!std::isfinite(out.exposureBias)) {
       out.exposureBias = 0.f;
     }
@@ -302,8 +272,8 @@ bool Parse(std::vector<uint8_t>&& data, File& out, std::string& error) {
       error = "cut short";
       return false;
     }
-    out.bloomThreshold = GetFloat(data.data() + at);
-    const uint32_t tints = Get32(data.data() + at + 4);
+    out.bloomThreshold = ReadLEFloat(data.data() + at);
+    const uint32_t tints = ReadLE32(data.data() + at + 4);
     at += 8;
     if (tints > 16 || (data.size() - at) / 16 < tints) {
       error = "cut short";
@@ -311,7 +281,7 @@ bool Parse(std::vector<uint8_t>&& data, File& out, std::string& error) {
     }
     out.bloomTints.resize(size_t(tints) * 4);
     for (uint32_t i = 0; i < tints * 4; ++i) {
-      out.bloomTints[i] = GetFloat(data.data() + at + i * 4);
+      out.bloomTints[i] = ReadLEFloat(data.data() + at + i * 4);
       if (!std::isfinite(out.bloomTints[i])) {
         out.bloomTints[i] = 0.f;
       }
@@ -326,7 +296,7 @@ bool Parse(std::vector<uint8_t>&& data, File& out, std::string& error) {
       error = "cut short";
       return false;
     }
-    const uint32_t grades = Get32(data.data() + at);
+    const uint32_t grades = ReadLE32(data.data() + at);
     at += 4;
     if (grades > kMaxGrades) {
       error = "too many grades";
@@ -339,9 +309,9 @@ bool Parse(std::vector<uint8_t>&& data, File& out, std::string& error) {
         return false;
       }
       const uint8_t* p = data.data() + at;
-      grade.layer = int32_t(Get32(p));
-      grade.fadeIn = GetFloat(p + 4);
-      grade.fadeOut = GetFloat(p + 8);
+      grade.layer = int32_t(ReadLE32(p));
+      grade.fadeIn = ReadLEFloat(p + 4);
+      grade.fadeOut = ReadLEFloat(p + 8);
       if (!(grade.fadeIn >= 0.f && grade.fadeIn < 600.f)) {
         grade.fadeIn = 0.f;
       }
@@ -356,8 +326,8 @@ bool Parse(std::vector<uint8_t>&& data, File& out, std::string& error) {
         }
         const uint8_t* q = data.data() + at;
         grade.on = q[0] != 0;
-        grade.priority = int32_t(Get32(q + 4));
-        const uint32_t links = Get32(q + 8);
+        grade.priority = int32_t(ReadLE32(q + 4));
+        const uint32_t links = ReadLE32(q + 8);
         at += 12;
         if (links > kMaxGradeLinks || (data.size() - at) / 8 < links) {
           error = "cut short";
@@ -366,7 +336,7 @@ bool Parse(std::vector<uint8_t>&& data, File& out, std::string& error) {
         grade.links.resize(links);
         for (GradeLink& link : grade.links) {
           q = data.data() + at;
-          link.sender = Get32(q);
+          link.sender = ReadLE32(q);
           link.state = q[4];
           link.action = q[5];
           at += 8;
@@ -386,8 +356,8 @@ bool Parse(std::vector<uint8_t>&& data, File& out, std::string& error) {
       error = "cut short";
       return false;
     }
-    out.exposureSigma = GetFloat(data.data() + at);
-    out.staticLerp = GetFloat(data.data() + at + 4);
+    out.exposureSigma = ReadLEFloat(data.data() + at);
+    out.staticLerp = ReadLEFloat(data.data() + at + 4);
     if (!(out.exposureSigma >= 0.f && out.exposureSigma < 10000.f)) {
       out.exposureSigma = 32.f;
     }
@@ -401,7 +371,7 @@ bool Parse(std::vector<uint8_t>&& data, File& out, std::string& error) {
       error = "cut short";
       return false;
     }
-    const uint32_t lights = Get32(data.data() + at);
+    const uint32_t lights = ReadLE32(data.data() + at);
     at += 4;
     if (lights > kMaxGrades) {
       error = "too many backlights";
@@ -414,14 +384,14 @@ bool Parse(std::vector<uint8_t>&& data, File& out, std::string& error) {
         return false;
       }
       const uint8_t* p = data.data() + at;
-      light.layer = int32_t(Get32(p));
-      light.fadeIn = GetFloat(p + 4);
-      light.fadeOut = GetFloat(p + 8);
+      light.layer = int32_t(ReadLE32(p));
+      light.fadeIn = ReadLEFloat(p + 4);
+      light.fadeOut = ReadLEFloat(p + 8);
       light.on = p[12] != 0;
-      light.priority = int32_t(Get32(p + 16));
-      light.top = GetFloat(p + 20);
-      light.back = GetFloat(p + 24);
-      const uint32_t links = Get32(p + 28);
+      light.priority = int32_t(ReadLE32(p + 16));
+      light.top = ReadLEFloat(p + 20);
+      light.back = ReadLEFloat(p + 24);
+      const uint32_t links = ReadLE32(p + 28);
       at += 32;
       if (!(light.fadeIn >= 0.f && light.fadeIn < 600.f)) {
         light.fadeIn = 0.f;
@@ -442,7 +412,7 @@ bool Parse(std::vector<uint8_t>&& data, File& out, std::string& error) {
       light.links.resize(links);
       for (GradeLink& link : light.links) {
         const uint8_t* q = data.data() + at;
-        link.sender = Get32(q);
+        link.sender = ReadLE32(q);
         link.state = q[4];
         link.action = q[5];
         at += 8;
@@ -454,7 +424,7 @@ bool Parse(std::vector<uint8_t>&& data, File& out, std::string& error) {
       error = "cut short";
       return false;
     }
-    const uint32_t fogs = Get32(data.data() + at);
+    const uint32_t fogs = ReadLE32(data.data() + at);
     at += 4;
     if (fogs > kMaxGrades) {
       error = "too many fogs";
@@ -467,29 +437,29 @@ bool Parse(std::vector<uint8_t>&& data, File& out, std::string& error) {
         return false;
       }
       const uint8_t* p = data.data() + at;
-      fog.layer = int32_t(Get32(p));
-      fog.fadeIn = GetFloat(p + 4);
-      fog.fadeOut = GetFloat(p + 8);
+      fog.layer = int32_t(ReadLE32(p));
+      fog.fadeIn = ReadLEFloat(p + 4);
+      fog.fadeOut = ReadLEFloat(p + 8);
       fog.on = p[12] != 0;
-      fog.priority = int32_t(Get32(p + 16));
+      fog.priority = int32_t(ReadLE32(p + 16));
       float* scalars[10] = {&fog.range,    &fog.scatter,    &fog.absorb,       &fog.m1z,         &fog.decay,
                             &fog.attenSlope, &fog.attenBias, &fog.noiseFreq, &fog.noiseStrength, &fog.lightCap};
       for (int i = 0; i < 10; ++i) {
-        *scalars[i] = GetFloat(p + 20 + 4 * i);
+        *scalars[i] = ReadLEFloat(p + 20 + 4 * i);
       }
       for (int i = 0; i < 3; ++i) {
-        fog.wind[i] = GetFloat(p + 60 + 4 * i);
+        fog.wind[i] = ReadLEFloat(p + 60 + 4 * i);
       }
       fog.useScriptWind = p[72] != 0;
       fog.noProbe = p[73] != 0;
       for (int i = 0; i < 4; ++i) {
-        fog.colorB[i] = GetFloat(p + 76 + 4 * i);
-        fog.colorA[i] = GetFloat(p + 92 + 4 * i);
+        fog.colorB[i] = ReadLEFloat(p + 76 + 4 * i);
+        fog.colorA[i] = ReadLEFloat(p + 92 + 4 * i);
       }
       for (int i = 0; i < 64; ++i) {
-        fog.lut[i] = GetFloat(p + 108 + 4 * i);
+        fog.lut[i] = ReadLEFloat(p + 108 + 4 * i);
       }
-      const uint32_t links = Get32(p + 364);
+      const uint32_t links = ReadLE32(p + 364);
       at += kFogBytes;
       if (!(fog.fadeIn >= 0.f && fog.fadeIn < 600.f)) {
         fog.fadeIn = 0.f;
@@ -537,7 +507,7 @@ bool Parse(std::vector<uint8_t>&& data, File& out, std::string& error) {
       fog.links.resize(links);
       for (GradeLink& link : fog.links) {
         const uint8_t* q = data.data() + at;
-        link.sender = Get32(q);
+        link.sender = ReadLE32(q);
         link.state = q[4];
         link.action = q[5];
         at += 8;
@@ -549,7 +519,7 @@ bool Parse(std::vector<uint8_t>&& data, File& out, std::string& error) {
             error = "cut short";
             return false;
           }
-          const uint32_t size = Get32(data.data() + at);
+          const uint32_t size = ReadLE32(data.data() + at);
           at += 4;
           const size_t padded = (size_t(size) + 3) & ~size_t(3);
           if (data.size() - at < padded) {
@@ -574,7 +544,7 @@ bool Parse(std::vector<uint8_t>&& data, File& out, std::string& error) {
       error = "cut short";
       return false;
     }
-    const uint32_t regions = Get32(data.data() + at);
+    const uint32_t regions = ReadLE32(data.data() + at);
     at += 4;
     if (regions > kMaxFogRegions) {
       error = "too many fog regions";
@@ -587,28 +557,28 @@ bool Parse(std::vector<uint8_t>&& data, File& out, std::string& error) {
         return false;
       }
       const uint8_t* p = data.data() + at;
-      region.layer = int32_t(Get32(p));
+      region.layer = int32_t(ReadLE32(p));
       region.on = p[4] != 0;
       region.fluid = p[5] <= 2 ? p[5] : 0;
       region.hasColor = p[6] != 0;
       region.hasCap = p[7] != 0;
       for (int i = 0; i < 12; ++i) {
-        region.m[i] = GetFloat(p + 8 + 4 * i);
+        region.m[i] = ReadLEFloat(p + 8 + 4 * i);
       }
       for (int i = 0; i < 3; ++i) {
-        region.edgeScale[i] = GetFloat(p + 56 + 4 * i);
-        region.edgeBias[i] = GetFloat(p + 72 + 4 * i);
+        region.edgeScale[i] = ReadLEFloat(p + 56 + 4 * i);
+        region.edgeBias[i] = ReadLEFloat(p + 72 + 4 * i);
       }
-      region.mult = GetFloat(p + 68);
-      region.cap = GetFloat(p + 84);
+      region.mult = ReadLEFloat(p + 68);
+      region.cap = ReadLEFloat(p + 84);
       for (int i = 0; i < 4; ++i) {
-        region.color[i] = GetFloat(p + 88 + 4 * i);
+        region.color[i] = ReadLEFloat(p + 88 + 4 * i);
       }
-      region.density = GetFloat(p + 104);
+      region.density = ReadLEFloat(p + 104);
       for (int i = 0; i < 6; ++i) {
-        region.box[i] = GetFloat(p + 108 + 4 * i);
+        region.box[i] = ReadLEFloat(p + 108 + 4 * i);
       }
-      const uint32_t links = Get32(p + 132);
+      const uint32_t links = ReadLE32(p + 132);
       at += kFogRegionBytes;
       // A region with anything that is not a number never shows.
       bool finite = std::isfinite(region.mult) && std::isfinite(region.cap) && std::isfinite(region.density);
@@ -635,7 +605,7 @@ bool Parse(std::vector<uint8_t>&& data, File& out, std::string& error) {
       region.links.resize(links);
       for (GradeLink& link : region.links) {
         const uint8_t* q = data.data() + at;
-        link.sender = Get32(q);
+        link.sender = ReadLE32(q);
         link.state = q[4];
         link.action = q[5];
         at += 8;
@@ -645,8 +615,8 @@ bool Parse(std::vector<uint8_t>&& data, File& out, std::string& error) {
           error = "cut short";
           return false;
         }
-        const float distance = GetFloat(data.data() + at);
-        const float transmittance = GetFloat(data.data() + at + 4);
+        const float distance = ReadLEFloat(data.data() + at);
+        const float transmittance = ReadLEFloat(data.data() + at + 4);
         region.subtract = data[at + 8] != 0;
         at += 12;
         if (std::isfinite(distance) && std::isfinite(transmittance)) {
@@ -661,7 +631,7 @@ bool Parse(std::vector<uint8_t>&& data, File& out, std::string& error) {
       error = "cut short";
       return false;
     }
-    const uint32_t transitions = Get32(data.data() + at);
+    const uint32_t transitions = ReadLE32(data.data() + at);
     at += 4;
     if (transitions > kMaxFogRegions) {
       error = "too many fog transitions";
@@ -674,19 +644,19 @@ bool Parse(std::vector<uint8_t>&& data, File& out, std::string& error) {
         return false;
       }
       const uint8_t* p = data.data() + at;
-      t.region = Get32(p);
-      t.layer = int32_t(Get32(p + 4));
+      t.region = ReadLE32(p);
+      t.layer = int32_t(ReadLE32(p + 4));
       t.on = p[8] != 0;
       t.autoStart = p[9] != 0;
       t.loop = p[10] != 0;
       t.select = p[11] & 0xf;
-      t.distance = GetFloat(p + 12);
-      t.transmittance = GetFloat(p + 16);
+      t.distance = ReadLEFloat(p + 12);
+      t.transmittance = ReadLEFloat(p + 16);
       for (int i = 0; i < 4; ++i) {
-        t.color[i] = GetFloat(p + 20 + 4 * i);
+        t.color[i] = ReadLEFloat(p + 20 + 4 * i);
       }
-      t.cap = GetFloat(p + 36);
-      const uint32_t size = Get32(p + 40);
+      t.cap = ReadLEFloat(p + 36);
+      const uint32_t size = ReadLE32(p + 40);
       at += kFogTransitionBytes;
       bool finite = std::isfinite(t.distance) && std::isfinite(t.transmittance) && std::isfinite(t.cap);
       for (const float v : t.color) {
@@ -711,7 +681,7 @@ bool Parse(std::vector<uint8_t>&& data, File& out, std::string& error) {
         error = "cut short";
         return false;
       }
-      const uint32_t links = Get32(data.data() + at);
+      const uint32_t links = ReadLE32(data.data() + at);
       at += 4;
       if (links > kMaxGradeLinks || (data.size() - at) / 8 < links) {
         error = "cut short";
@@ -720,7 +690,7 @@ bool Parse(std::vector<uint8_t>&& data, File& out, std::string& error) {
       t.links.resize(links);
       for (GradeLink& link : t.links) {
         const uint8_t* q = data.data() + at;
-        link.sender = Get32(q);
+        link.sender = ReadLE32(q);
         link.state = q[4];
         link.action = q[5];
         at += 8;

@@ -8,6 +8,7 @@
 // and the in-game debug window can toggle them live.
 
 class CStateManager;
+class CGuiModel;
 
 namespace PortDebug {
 
@@ -242,7 +243,17 @@ void SetMouseAim(bool enabled);
 // Twin-stick: the right stick aims the first-person camera directly (through the
 // same aim state as the mouse) and is consumed, so it no longer drives the
 // game's free-look. Works with or without mouse aim.
+// Reads false while touch is in use (TouchActive), as do SwapScanXray, ShiftBinding(2) (-1)
+// and PadAltButton (-1): the touch overlay always does its GameCube-labelled actions.
 bool TwinStick();
+// Android: touch was the last input and the F1 menu is closed. False on desktop.
+bool TouchActive();
+// True on Android when the modern (non-classic) touch layout is the active device: drag aims like a mouse.
+bool TouchDirectAim();
+// The direct aim path is active: mouse aim, twin stick or the modern touch layout.
+bool DirectAim();
+bool TouchClassic();
+void SetTouchClassic(bool on);
 void SetTwinStick(bool enabled);
 // Right stick Y (-1..1) before twin-stick consumed it, for the Spring Ball;
 // 0 when twin-stick is off (the game input still carries it then).
@@ -310,7 +321,7 @@ std::string CardImport(const std::string& path);
 std::string CardExport(const std::string& dest);
 std::string CardImportDolphin();
 std::string CardExportDolphin();
-// Cheat: the player takes no damage (F1 > Debug > cheats, MP_GODMODE, console `god`).
+// Cheat: the player takes no damage (F1 > Debug > Cheats, MP_GODMODE, console `god`).
 bool Invulnerable();
 void SetInvulnerable(bool enabled);
 // Write the log to <user folder>/metroid_prime_port.log (port_log_file.h). MP_LOG_FILE=1
@@ -396,6 +407,64 @@ void SetMouseSensitivity(float radiansPerPixel);
 void AddMouseDelta(float dx, float dy);
 // Called once per simulated frame to latch the deltas for that frame.
 void BeginFrameMouse();
+// Touch aim (Android drag-to-turn): finger travel in dp, right/down positive.
+// Thread-safe; drained by BeginFrameMouse.
+bool TouchAim();
+void SetTouchAim(bool on);
+float TouchAimSpeed();
+void SetTouchAimSpeed(float pixelsPerDp);
+void AddTouchAim(float dxDp, float dyDp);
+// GameCube scheme (neither mouse aim nor twin stick): CPlayer turns by the touch
+// travel and holds a free-look pitch while a touch-aim finger is down.
+// TakeTouchLook returns this tick's world yaw/pitch change in radians (once per
+// tick) and whether touch aim is usable. The finger state comes from the Android
+// overlay, or HoldTouchAim (console) for that many seconds.
+void SetTouchAimDown(bool down);
+void HoldTouchAim(float seconds);
+bool TouchAimDown();
+bool TakeTouchLook(float& dyaw, float& dpitch);
+// Tap the minimap to open the map (Android touch overlay). The HUD publishes the
+// minimap's screen rect (0..1 of the window, origin top-left) each frame it is
+// drawn; MinimapRect fills x0,y0,x1,y1 and returns false when it isn't shown.
+// `drawn` is false where the map opens but the minimap isn't drawn (the visors
+// other than Combat): the overlay shows a map button in the rect instead.
+// Hold-and-slide beam and visor wheels on the Android overlay. The player
+// publishes WheelState each frame (bits 0-3 visors owned in EPlayerVisor order
+// Combat/X-Ray/Scan/Thermal, 4-7 beams owned in EBeamId order Power/Ice/Wave/
+// Plasma, 8-9 current visor, 10-11 current beam, 12 valid; 0 when stale). A
+// request is read by ControlMapper for ~120 ms as a press of that command.
+bool TouchWheels();
+void SetTouchWheels(bool on);
+bool TouchVisorTapScan();
+void SetTouchVisorTapScan(bool on);
+void SetWheelState(uint32_t mask);
+uint32_t WheelState();
+void RequestVisor(int visor);
+void RequestBeam(int beam);
+// The HUD's beam/visor menu icons for the touch wheels (Android), decoded to RGBA8 when the HUD
+// frame is up. wheel 0 = visor, 1 = beam; icons[i] is the menu item i's icon widget (EPlayerVisor
+// / EBeamId order). Game thread, each frame until all four are taken.
+void CaptureWheelIcons(int wheel, CGuiModel* const* icons);
+bool VisorRequested(int visor);
+bool BeamRequested(int beam);
+bool TouchMapTap();
+void SetTouchMapTap(bool on);
+void SetMinimapRect(bool valid, bool drawn, float x0, float y0, float x1, float y1);
+bool MinimapRect(float* out4, bool* drawn = nullptr);
+void RequestMapTap();
+// Pad poll hook: true for the one poll where a requested tap reads Z held.
+bool ConsumeMapTapZ();
+// Drag to pan the map screen: CAutoMapper publishes SetMapScreenOpen each frame,
+// the overlay (or the console's mappan) adds dp deltas with the view height in
+// dp, and CAutoMapper drains them with TakeMapPan (true while a finger is on it).
+void SetMapScreenOpen(bool open);
+bool MapScreenOpen();
+void AddMapPan(float dxDp, float dyDp, float viewHeightDp, int holdMs = 250);
+void AddMapRotate(float radians);
+float TakeMapRotate();
+void AddMapZoom(float ratio);
+float TakeMapZoom();
+bool TakeMapPan(float* dxDp, float* dyDp, float* viewHeightDp);
 void GetFrameMouseDelta(float& dx, float& dy);
 // The yaw/pitch change (radians) the next tick's look input will apply, as seen
 // a fraction of a tick after the last one. False when there is none to show.
@@ -424,12 +493,9 @@ void SaveSettingsNow();
 // controls. Unlike Visible() it performs no lazy initialization, so it is safe
 // to call from the UI thread.
 bool OverlayVisible();
-// Thread-safe snapshot of the twin-stick setting, for the Android touch overlay
-// to choose a controller layout. Like OverlayVisible(), performs no lazy
-// initialization, so it is safe to call from the UI thread.
-bool TwinStickFlag();
 // Same, for whether the Android touch overlay draws the GameCube pad's colours
-// rather than plain translucent buttons.
+// rather than plain translucent buttons. Like OverlayVisible(), performs no lazy
+// initialization, so it is safe to call from the UI thread.
 bool TouchColorsFlag();
 void Toggle();
 // Asks for the overlay to be toggled on the next frame. Safe to call from any

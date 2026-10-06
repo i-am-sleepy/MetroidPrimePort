@@ -368,7 +368,7 @@ void CPlayer::UpdateOrbitInput(const CFinalInput& input, CStateManager& mgr) {
           }
           SetOrbitState(kOS_OrbitObject, mgr);
           UpdateOrbitPosition(gpTweakPlayer->GetOrbitNormalDistance(x308_orbitType), mgr);
-        } else if (PortDebug::MouseAim() || PortDebug::TwinStick()) {
+        } else if (PortDebug::DirectAim()) {
           // A GameCube L trigger's analog travel (Orbit Far) starts a frame before
           // its click, so an empty lock-on becomes a point orbit there. Mouse
           // buttons, keys and pad triggers mapped as buttons press both in the

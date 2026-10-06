@@ -2,7 +2,7 @@
 #define METROID_PRIME_PORT_PORT_LOG_FILE_H
 #include <string>
 
-// The "write the log to a file" setting (F1 > Debug > Log, MP_LOG_FILE). Everything
+// The "write the log to a file" setting (F1 > System > Log, MP_LOG_FILE). Everything
 // the process prints to stdout and stderr - the port's messages, Aurora's, SDL's,
 // and the FATAL line Aurora prints right before it aborts - is also written to
 // <user folder>/metroid_prime_port.log, so a crash on a machine without a

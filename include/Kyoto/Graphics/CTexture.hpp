@@ -146,6 +146,8 @@ private:
 
 public:
   void PortSetNativeId(uint id);
+  // Non-zero when a mod's .dds stands in for this texture's (stub) texels.
+  uint PortNativeId() const { return mPortNativeId; }
   // Blank rows for new glyph cells at the bottom (the height grows), keeping
   // mip 0's texels. Only single-mip 4/8-bit textures; false otherwise and when
   // a mod replaces the texels. Existing UVs must be rescaled by old/new height.

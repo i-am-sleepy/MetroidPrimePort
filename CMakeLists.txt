@@ -223,6 +223,18 @@ if(ANDROID)
 else()
     list(APPEND MP_PORT_SOURCES platform/port_remastered_ffmpeg.cpp)
 endif()
+# The port's own sources build warning-clean: -Wall -Wextra catch mistakes in
+# port code. Decompiled game/engine code (src/, include/) and vendored code
+# (extern/) are excluded. -Wno-multichar: the code deliberately uses 'TXTR'-style
+# FourCC constants. -Wno-unused-parameter and -Wno-ignored-qualifiers: every hit
+# is inside decompiled headers (include/) that platform sources include and that
+# must not be edited (named-but-unused params and const-qualified return types
+# are the decomp style); platform sources themselves have none. MSVC gets nothing
+# here (its own flags live elsewhere).
+if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
+    set_source_files_properties(${MP_PORT_SOURCES} platform/smoke.cpp PROPERTIES
+        COMPILE_OPTIONS "-Wall;-Wextra;-Wno-multichar;-Wno-unused-parameter;-Wno-ignored-qualifiers")
+endif()
 if(ANDROID)
     add_library(metroid_prime_port SHARED ${MP_PORT_SOURCES})
     target_link_libraries(metroid_prime_port PRIVATE mediandk)
@@ -444,7 +456,7 @@ if(MP_BUILD_TESTS)
     target_include_directories(port_buffer_tests PRIVATE include extern/aurora/include)
     target_compile_definitions(port_buffer_tests PRIVATE TARGET_PC VERSION=0)
     add_executable(port_ai_tests tests/port_ai.cpp platform/ai_dma.cpp)
-    target_include_directories(port_ai_tests PRIVATE extern/aurora/include)
+    target_include_directories(port_ai_tests PRIVATE platform/include extern/aurora/include)
     target_compile_definitions(port_ai_tests PRIVATE TARGET_PC)
     target_link_libraries(port_ai_tests PRIVATE ${AURORA_SDL3_TARGET})
     add_executable(port_randomizer_tests
@@ -566,6 +578,8 @@ if(MP_BUILD_TESTS)
     target_include_directories(port_importers_tests PRIVATE platform/include)
     add_executable(port_custom_res_tests tests/port_custom_res.cpp platform/port_custom_res.cpp)
     target_include_directories(port_custom_res_tests PRIVATE platform/include)
+    add_executable(port_env_tests tests/port_env.cpp)
+    target_include_directories(port_env_tests PRIVATE platform/include)
     add_executable(port_hold_toggle_tests tests/port_hold_toggle.cpp)
     target_include_directories(port_hold_toggle_tests PRIVATE platform/include)
     add_executable(port_tick_pair_tests tests/port_tick_pair.cpp)
@@ -611,7 +625,7 @@ if(MP_BUILD_TESTS)
     add_test(NAME port_gci_tests COMMAND port_gci_tests)
     set_tests_properties(port_gci_tests PROPERTIES TIMEOUT 15 LABELS port)
     aurora_copy_runtime_dlls(port_gci_tests)
-    foreach(test IN ITEMS port_remastered_report_tests port_buffer_tests port_ai_tests port_randomizer_tests port_apclient_tests port_ap_logic_tests port_musyx_tests port_musyx_charge_loop_tests port_disc_tests port_mouse_tests port_touch_pad_tests port_json_tests port_ws_tests port_mods_tests port_actor_collision_bounds_tests port_room_env_tests port_room_geo_tests port_hd_font_tests port_hud_bars_tests port_remastered_astc_tests port_remastered_hud_tests port_remastered_movie_tests port_gallery_tests port_remastered_nso_tests port_remastered_text_tests port_remastered_uv_tests port_remastered_anuv_tests port_remastered_lits_tests port_remastered_blend_tests port_remastered_image_tests port_remastered_effect_tests port_remastered_effect_convert_tests port_remastered_effect_import_tests port_importers_tests port_custom_res_tests port_hold_toggle_tests port_tick_pair_tests port_livesplit_tests port_discord_tests port_savestate_tests port_timing_tests port_audio_math_tests)
+    foreach(test IN ITEMS port_remastered_report_tests port_buffer_tests port_ai_tests port_randomizer_tests port_apclient_tests port_ap_logic_tests port_musyx_tests port_musyx_charge_loop_tests port_disc_tests port_mouse_tests port_touch_pad_tests port_json_tests port_ws_tests port_mods_tests port_actor_collision_bounds_tests port_room_env_tests port_room_geo_tests port_hd_font_tests port_hud_bars_tests port_remastered_astc_tests port_remastered_hud_tests port_remastered_movie_tests port_gallery_tests port_remastered_nso_tests port_remastered_text_tests port_remastered_uv_tests port_remastered_anuv_tests port_remastered_lits_tests port_remastered_blend_tests port_remastered_image_tests port_remastered_effect_tests port_remastered_effect_convert_tests port_remastered_effect_import_tests port_importers_tests port_custom_res_tests port_hold_toggle_tests port_env_tests port_tick_pair_tests port_livesplit_tests port_discord_tests port_savestate_tests port_timing_tests port_audio_math_tests)
         add_test(NAME ${test} COMMAND ${test})
         set_tests_properties(${test} PROPERTIES TIMEOUT 15 LABELS port)
         aurora_copy_runtime_dlls(${test})

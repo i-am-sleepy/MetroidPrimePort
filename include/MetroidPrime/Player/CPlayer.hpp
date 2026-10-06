@@ -299,6 +299,7 @@ public:
   bool MouseControlsAllowed(const CStateManager& mgr) const;
   bool MouseLookIsFree(const CStateManager& mgr) const;
   void UpdateMouseAim(CStateManager& mgr);
+  void UpdateTouchLook(float dt, CStateManager& mgr); // port
   void UpdateMorphBallTransition(float dt, CStateManager& mgr);
   void UpdateAimTarget(CStateManager& mgr);
   void UpdateAimTargetTimer(float dt);
@@ -607,6 +608,8 @@ private:
   float x3e8_horizFreeLookAngleVel;
   float x3ec_freeLookPitchAngle;
   float x3f0_vertFreeLookAngleVel;
+  float mTouchLookPitch = 0.f;     // port: touch-drag free-look pitch target
+  bool mTouchLookActive = false;   // port: touch look owns the free-look state
   TUniqueId x3f4_aimTarget;
   CVector3f x3f8_targetAimPosition;
   TReservedAverage< CVector3f, 10 > x404_aimTargetAverage;

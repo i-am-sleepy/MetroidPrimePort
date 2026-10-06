@@ -1,3 +1,4 @@
+#include "port_env.h"
 #include "port_randomizer.h"
 #include "port_log.h"
 #include "port_paths.h"
@@ -84,11 +85,6 @@ std::string SeedPath() {
 }
 
 std::string LogPath(const char* name) { return UserDirectory() + name; }
-
-bool EnvEnabled(const char* name) {
-  const char* value = std::getenv(name);
-  return value != nullptr && value[0] != '\0' && std::strcmp(value, "0") != 0;
-}
 
 struct ParseError {
   size_t offset;
@@ -498,7 +494,7 @@ void EnsureLoaded() {
     static const bool loaded = []() noexcept {
       try {
         State& state = GetState();
-        state.dump = EnvEnabled("MP_RANDO_DUMP");
+        state.dump = port::EnvFlag("MP_RANDO_DUMP");
         (void)LoadSeed(state);
       } catch (const ParseError& error) {
         State& state = GetState();

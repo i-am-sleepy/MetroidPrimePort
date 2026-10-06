@@ -784,7 +784,7 @@ bool CPlayer::MouseControlsAllowed(const CStateManager& mgr) const {
   // scanned object, so free-look is unaffected.
   const bool inputState = mgr.GetGameState() == CStateManager::kGS_Running ||
                           mgr.GetGameState() == CStateManager::kGS_SoftPaused;
-  return (PortDebug::MouseAim() || PortDebug::TwinStick()) && inputState &&
+  return PortDebug::DirectAim() && inputState &&
          !GetDisableInput() && mgr.GetPlayerState()->IsAlive() &&
          x2f8_morphBallState == kMS_Unmorphed && x2f4_cameraState == kCS_FirstPerson &&
          cameras != nullptr && cameras->GetFirstPersonCamera() != nullptr && cameras->IsInFPCamera() &&
@@ -817,6 +817,97 @@ void CPlayer::UpdateMouseAim(CStateManager& mgr) {
     // timer in the air as a grapple jump, which blocked the sideways dash.
     x3ec_freeLookPitchAngle = PortDebug::AimPitch();
     x9c4_25_showCrosshairs = PortDebug::MouseCrosshair();
+  }
+}
+
+// port: what the touch overlay's beam and visor wheels read (see
+// PortDebug::SetWheelState for the bit layout).
+static void PublishWheelState(const CPlayer& player, CStateManager& mgr) {
+  const CPlayerState* ps = mgr.GetPlayerState();
+  if (ps == nullptr) {
+    return;
+  }
+  // Visors and beams only switch in first person, unmorphed; elsewhere the
+  // overlay hides its wheel buttons.
+  const bool usable = player.GetMorphballTransitionState() == CPlayer::kMS_Unmorphed &&
+                      player.GetCameraState() == CPlayer::kCS_FirstPerson;
+  static const CPlayerState::EItemType visorItems[4] = {
+      CPlayerState::kIT_CombatVisor, CPlayerState::kIT_XRayVisor, CPlayerState::kIT_ScanVisor,
+      CPlayerState::kIT_ThermalVisor};
+  static const CPlayerState::EItemType beamItems[4] = {
+      CPlayerState::kIT_PowerBeam, CPlayerState::kIT_IceBeam, CPlayerState::kIT_WaveBeam,
+      CPlayerState::kIT_PlasmaBeam};
+  uint mask = usable ? 1u << 12 : 0u;
+  for (int i = 0; i < 4; ++i) {
+    if (ps->HasPowerUp(visorItems[i])) {
+      mask |= 1u << i;
+    }
+    if (ps->HasPowerUp(beamItems[i])) {
+      mask |= 1u << (4 + i);
+    }
+  }
+  mask |= (static_cast< uint >(ps->GetCurrentVisor()) & 3u) << 8;
+  const int beam = ps->GetCurrentBeam();
+  mask |= (static_cast< uint >(beam >= 0 && beam < 4 ? beam : 0) & 3u) << 10;
+  PortDebug::SetWheelState(mask);
+}
+
+// Classic GameCube scheme only (not on the direct aim path): a dragged finger
+// turns Samus by the distance and, while it is down, holds a free-look pitch
+// that eases back to level once it lifts.
+void CPlayer::UpdateTouchLook(float dt, CStateManager& mgr) {
+  float dyaw = 0.f;
+  float dpitch = 0.f;
+  const bool usable = PortDebug::TakeTouchLook(dyaw, dpitch);
+  const CCameraManager* cameras = mgr.GetCameraManager();
+  const bool allowed =
+      usable && !PortDebug::DirectAim() &&
+      mgr.GetGameState() == CStateManager::kGS_Running && !GetDisableInput() &&
+      !x760_controlsFrozen && !GetFrozenState() && mgr.GetPlayerState()->IsAlive() &&
+      x2f8_morphBallState == kMS_Unmorphed && !IsMorphBallTransitioning() &&
+      x2f4_cameraState == kCS_FirstPerson && x304_orbitState == kOS_NoOrbit &&
+      (x3b8_grappleState == kGS_None || x3b8_grappleState == kGS_Firing) && cameras != nullptr &&
+      cameras->IsInFPCamera() && !cameras->IsInCinematicCamera() &&
+      !cameras->GetCurrentCamera(mgr).DisablesInput();
+  if (!allowed) {
+    mTouchLookPitch = 0.f;
+    mTouchLookActive = false;
+    return;
+  }
+  if (dyaw != 0.f) {
+    const CVector3f forward = GetTransform().GetForward();
+    const float yaw = atan2f(-forward.GetX(), forward.GetY()) + dyaw;
+    SetTransform(CQuaternion::ZRotation(CRelAngle(yaw)).BuildTransform4f(GetTransform().GetTranslation()));
+  }
+  if (x3dd_lookButtonHeld) {
+    // R free look owns the pitch.
+    mTouchLookPitch = 0.f;
+    mTouchLookActive = false;
+    return;
+  }
+  const float limit = gpTweakPlayer->GetVerticalFreeLookAngleVel();
+  if (PortDebug::TouchAimDown()) {
+    if (!mTouchLookActive) {
+      // Start from the angle free look already holds, so the view doesn't jump.
+      mTouchLookPitch = x3ec_freeLookPitchAngle;
+      mTouchLookActive = true;
+    }
+    mTouchLookPitch = CMath::Clamp(-limit, mTouchLookPitch + dpitch, limit);
+    x3f0_vertFreeLookAngleVel = mTouchLookPitch;
+    x3de_lookAnalogHeld = true;
+    x3dc_inFreeLook = true;
+    x3e0_curFreeLookCenteredTime = 0.f;
+  } else if (mTouchLookActive) {
+    // Released: level out at the snap speed, as when R is let go.
+    mTouchLookPitch = 0.f;
+    x3f0_vertFreeLookAngleVel = 0.f;
+    x3de_lookAnalogHeld = false;
+    if (fabsf(x3ec_freeLookPitchAngle) < gpTweakPlayer->mFreeLookCenteredThresholdAngle) {
+      mTouchLookActive = false;
+    } else {
+      x3dc_inFreeLook = true;
+      x3e0_curFreeLookCenteredTime = 0.f;
+    }
   }
 }
 
@@ -1655,7 +1746,9 @@ void CPlayer::Think(float dt, CStateManager& mgr) {
   AdjustEyeOffset(mgr);
   UpdateEnvironmentDamageCameraShake(dt, mgr);
   UpdatePhazonDamage(dt, mgr);
+  PublishWheelState(*this, mgr);
   if (!MouseControlsAllowed(mgr)) {
+    UpdateTouchLook(dt, mgr);
     UpdateFreeLook(dt);
   }
   UpdatePlayerHints(mgr);

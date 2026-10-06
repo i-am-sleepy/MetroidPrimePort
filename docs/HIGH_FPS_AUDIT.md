@@ -105,9 +105,9 @@ all three accumulate real time and step it in fixed 1/60 substeps.
 ## Implemented: experimental `sim_rate`
 
 - `PortDebug::SimRate()/SetSimRate()/SimPeriod()` (env `MP_SIM_RATE`, settings
-  key `sim_rate`, slider in the F1 Performance tab, range 30..480, default 60).
+  key `sim_rate`, slider in F1 > Video > Frame rate, range 30..480, default 60).
 - `PortDebug::SimAdaptive()/SetSimAdaptive()` (env `MP_SIM_ADAPTIVE`, settings
-  key `sim_adaptive`, checkbox in the same tab). When set, `UpdateTicks` uses
+  key `sim_adaptive`, checkbox on the same page). When set, `UpdateTicks` uses
   `period = clamp(frameTime, 1/480, 1/30)` instead of `1/SimRate()`, i.e. one
   step per frame with `dt` equal to the measured frame time, so a variable
   frame rate is matched tick-for-tick and the fixed-step accumulator only

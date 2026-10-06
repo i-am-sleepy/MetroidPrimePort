@@ -2,6 +2,7 @@
 // (port_remastered_image.h).
 
 #include "port_remastered_image.h"
+#include "port_bytes.h"
 
 #include <algorithm>
 #include <atomic>
@@ -112,21 +113,9 @@ Image HalfOf(const Image& image, MapKind kind) {
   return Resize(image, std::max(image.width / 2, 1), std::max(image.height / 2, 1), kind);
 }
 
-void Put16(std::vector<uint8_t>& out, uint32_t v) {
-  out.push_back(uint8_t(v >> 8));
-  out.push_back(uint8_t(v));
-}
-
-void Put32(std::vector<uint8_t>& out, uint32_t v) {
-  Put16(out, v >> 16);
-  Put16(out, v & 0xFFFF);
-}
-
-void Put32LE(std::vector<uint8_t>& out, uint32_t v) {
-  for (int i = 0; i < 4; ++i) {
-    out.push_back(uint8_t(v >> (8 * i)));
-  }
-}
+using port::AppendBE16;
+using port::AppendBE32;
+using port::AppendLE32;
 
 // --- CMPR ---------------------------------------------------------------------
 
@@ -904,10 +893,10 @@ std::vector<uint8_t> EncodeTxtrRgba8(const Image& image, int minSize, MapKind ki
     levels.push_back(HalfOf(levels.back(), kind));
   }
   std::vector<uint8_t> out;
-  Put32(out, 9);
-  Put16(out, uint32_t(image.width));
-  Put16(out, uint32_t(image.height));
-  Put32(out, uint32_t(levels.size()));
+  AppendBE32(out, 9);
+  AppendBE16(out, uint32_t(image.width));
+  AppendBE16(out, uint32_t(image.height));
+  AppendBE32(out, uint32_t(levels.size()));
   for (const Image& lv : levels) {
     // 4x4 blocks: sixteen (alpha, red) pairs, then sixteen (green, blue).
     for (int by = 0; by < lv.height; by += 4) {
@@ -945,10 +934,10 @@ std::vector<uint8_t> EncodeTxtrCmpr(const Image& image, bool alpha, MapKind kind
     KeepCoverage(levels);
   }
   std::vector<uint8_t> out;
-  Put32(out, 10);
-  Put16(out, uint32_t(image.width));
-  Put16(out, uint32_t(image.height));
-  Put32(out, uint32_t(levels.size()));
+  AppendBE32(out, 10);
+  AppendBE16(out, uint32_t(image.width));
+  AppendBE16(out, uint32_t(image.height));
+  AppendBE32(out, uint32_t(levels.size()));
   for (const Image& lv : levels) {
     // 8x8 tiles of four blocks each.
     for (int ty = 0; ty < lv.height; ty += 8) {
@@ -1225,27 +1214,27 @@ std::vector<uint8_t> EncodeDds(const Image& image, DdsFormat format, bool punch,
   // DDSD_CAPS|HEIGHT|WIDTH|PIXELFORMAT|MIPMAPCOUNT|LINEARSIZE; DDPF_FOURCC
   // 'DX10'; COMPLEX|TEXTURE|MIPMAP.
   out.insert(out.end(), {'D', 'D', 'S', ' '});
-  Put32LE(out, 124);
-  Put32LE(out, 0x000A1007);
-  Put32LE(out, uint32_t(image.height));
-  Put32LE(out, uint32_t(image.width));
-  Put32LE(out, uint32_t(blocks(image.width) * blocks(image.height) * 16));
-  Put32LE(out, 0);
-  Put32LE(out, uint32_t(levels.size()));
+  AppendLE32(out, 124);
+  AppendLE32(out, 0x000A1007);
+  AppendLE32(out, uint32_t(image.height));
+  AppendLE32(out, uint32_t(image.width));
+  AppendLE32(out, uint32_t(blocks(image.width) * blocks(image.height) * 16));
+  AppendLE32(out, 0);
+  AppendLE32(out, uint32_t(levels.size()));
   out.resize(out.size() + 44);
-  Put32LE(out, 32);
-  Put32LE(out, 4);
+  AppendLE32(out, 32);
+  AppendLE32(out, 4);
   out.insert(out.end(), {'D', 'X', '1', '0'});
   out.resize(out.size() + 20);
-  Put32LE(out, 0x00401008);
+  AppendLE32(out, 0x00401008);
   out.resize(out.size() + 16);
   const bool astc = format == DdsFormat::ASTC4x4 || format == DdsFormat::ASTC4x4Normal;
   // DXGI format: BC7_UNORM, BC5_UNORM, ASTC_4X4_UNORM.
-  Put32LE(out, astc ? 134 : format == DdsFormat::BC7 ? 98 : 83);
-  Put32LE(out, 3);  // TEXTURE2D
-  Put32LE(out, 0);
-  Put32LE(out, 1);  // array size
-  Put32LE(out, 0);
+  AppendLE32(out, astc ? 134 : format == DdsFormat::BC7 ? 98 : 83);
+  AppendLE32(out, 3);  // TEXTURE2D
+  AppendLE32(out, 0);
+  AppendLE32(out, 1);  // array size
+  AppendLE32(out, 0);
   for (const Image& lv : levels) {
     if (astc) {
       EncodeAstcLevel(lv, format == DdsFormat::ASTC4x4Normal, out);

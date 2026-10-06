@@ -62,7 +62,7 @@
 #include "rstl/math.hpp"
 
 namespace {
-// Port unlocks (F1 > Extras) stand in for the save's flags here without
+// Port unlocks (F1 > Game > Unlocks) stand in for the save's flags here without
 // touching them, so switching an unlock off locks the extra again. The Fusion
 // Suit also needs normal mode beaten, so its unlock implies that too.
 bool NormalModeBeat() {

@@ -1,4 +1,5 @@
 #include "port_custom_res.h"
+#include "port_bytes.h"
 
 #include "port_log.h"
 
@@ -26,17 +27,8 @@ constexpr uint32_t kBlueShieldCmdl = 0x0734977A; // blueShield_v1.CMDL
 constexpr uint32_t kBlueShieldVerticalCmdl = 0x18D0AEE6;
 constexpr uint32_t kMissileShieldCmdl = 0xEFDFFB8C;
 
-uint32_t Get32(const std::vector<uint8_t>& data, size_t at) {
-  return (uint32_t(data[at]) << 24) | (uint32_t(data[at + 1]) << 16) |
-         (uint32_t(data[at + 2]) << 8) | data[at + 3];
-}
-
-void Put32(std::vector<uint8_t>& data, size_t at, uint32_t value) {
-  data[at] = uint8_t(value >> 24);
-  data[at + 1] = uint8_t(value >> 16);
-  data[at + 2] = uint8_t(value >> 8);
-  data[at + 3] = uint8_t(value);
-}
+using port::GetBE32;
+using port::SetBE32;
 
 template <size_t N>
 std::vector<uint8_t> Embedded(const unsigned char (&bytes)[N]) {
@@ -245,7 +237,7 @@ bool Build(uint32_t id, const DiscReader& read, Resource& out) {
 
 bool TintTxtr(std::vector<uint8_t>& txtr, const float matrix[3][3]) {
   const size_t kHeader = 12;
-  if (txtr.size() < kHeader || Get32(txtr, 0) != 10)
+  if (txtr.size() < kHeader || GetBE32(txtr, 0) != 10)
     return false;
   auto tint = [&](uint16_t c) {
     const float in[3] = {float((c >> 11) & 31) / 31.f, float((c >> 5) & 63) / 63.f,
@@ -293,32 +285,32 @@ bool SetCmdlTexture(std::vector<uint8_t>& cmdl, uint32_t index, uint32_t texture
   // Header: magic, version, flags, AABB (6 floats), section count, material
   // set count, section sizes; data starts 32-byte aligned with material set 0,
   // whose first word is its texture count.
-  if (cmdl.size() < 44 || Get32(cmdl, 0) != 0xDEADBABE || Get32(cmdl, 40) == 0)
+  if (cmdl.size() < 44 || GetBE32(cmdl, 0) != 0xDEADBABE || GetBE32(cmdl, 40) == 0)
     return false;
-  const uint64_t sections = Get32(cmdl, 36);
+  const uint64_t sections = GetBE32(cmdl, 36);
   const uint64_t dataStart = (44 + 4 * sections + 31) & ~uint64_t(31);
   if (dataStart + 4 > cmdl.size())
     return false;
-  const uint32_t count = Get32(cmdl, dataStart);
+  const uint32_t count = GetBE32(cmdl, dataStart);
   const uint64_t at = dataStart + 4 + 4 * uint64_t(index);
   if (index >= count || at + 4 > cmdl.size())
     return false;
-  Put32(cmdl, at, texture);
+  SetBE32(cmdl, at, texture);
   return true;
 }
 
 bool SetAncsModel(std::vector<uint8_t>& ancs, uint32_t expectedModel, uint32_t model) {
   // u16 version, u16 character set version, u32 character count, then
   // character 0: u32 id, u16 version, name (NUL-terminated), u32 model.
-  if (ancs.size() < 14 || Get32(ancs, 4) == 0)
+  if (ancs.size() < 14 || GetBE32(ancs, 4) == 0)
     return false;
   size_t at = 14;
   while (at < ancs.size() && ancs[at] != 0)
     ++at;
   ++at;
-  if (at + 4 > ancs.size() || Get32(ancs, at) != expectedModel)
+  if (at + 4 > ancs.size() || GetBE32(ancs, at) != expectedModel)
     return false;
-  Put32(ancs, at, model);
+  SetBE32(ancs, at, model);
   return true;
 }
 
@@ -381,15 +373,15 @@ std::vector<uint8_t> MakeStrg(const std::u16string& text) {
   // One language (ENGL, which the game falls back to for any other) holding
   // one string: its offset table, then the UTF-16BE text and a terminator.
   std::vector<uint8_t> strg(28);
-  Put32(strg, 0, 0x87654321);
-  Put32(strg, 4, 0);
-  Put32(strg, 8, 1);
-  Put32(strg, 12, 1);
-  Put32(strg, 16, 0x454E474C);
-  Put32(strg, 20, 0);
-  Put32(strg, 24, uint32_t(4 + (text.size() + 1) * 2));
+  SetBE32(strg, 0, 0x87654321);
+  SetBE32(strg, 4, 0);
+  SetBE32(strg, 8, 1);
+  SetBE32(strg, 12, 1);
+  SetBE32(strg, 16, 0x454E474C);
+  SetBE32(strg, 20, 0);
+  SetBE32(strg, 24, uint32_t(4 + (text.size() + 1) * 2));
   strg.resize(strg.size() + 4);
-  Put32(strg, 28, 4);
+  SetBE32(strg, 28, 4);
   for (char16_t unit : text) {
     strg.push_back(uint8_t(unit >> 8));
     strg.push_back(uint8_t(unit));
@@ -403,22 +395,22 @@ std::vector<uint8_t> MakeScan(uint32_t strg) {
   // randomprime's pickup scans: version 5, the retail scan frame, normal
   // speed, no logbook category, not important, and four empty image slots.
   std::vector<uint8_t> scan(25);
-  Put32(scan, 0, 5);
-  Put32(scan, 4, 0x0BADBEEF);
-  Put32(scan, 8, 0xDCEC3E77);
-  Put32(scan, 12, strg);
-  Put32(scan, 16, 0);
-  Put32(scan, 20, 0);
+  SetBE32(scan, 0, 5);
+  SetBE32(scan, 4, 0x0BADBEEF);
+  SetBE32(scan, 8, 0xDCEC3E77);
+  SetBE32(scan, 12, strg);
+  SetBE32(scan, 16, 0);
+  SetBE32(scan, 20, 0);
   scan[24] = 0;
   const float appearance[] = {0.25f, 0.5f, 0.75f, 1.f};
   for (float range : appearance) {
     const size_t at = scan.size();
     scan.resize(at + 28, 0);
-    Put32(scan, at, 0xFFFFFFFF);
+    SetBE32(scan, at, 0xFFFFFFFF);
     uint32_t bits;
     std::memcpy(&bits, &range, sizeof(bits));
-    Put32(scan, at + 4, bits);
-    Put32(scan, at + 8, 0xFFFFFFFF);
+    SetBE32(scan, at + 4, bits);
+    SetBE32(scan, at + 8, 0xFFFFFFFF);
   }
   scan.resize(scan.size() + 23, 0xFF);
   return scan;

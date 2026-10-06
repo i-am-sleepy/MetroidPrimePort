@@ -119,9 +119,10 @@ public:
   // (CTexture::EClampMode); all repeat without a 'PBR5' record.
   // lightScale, when given, gets the diffuse and F0 factors of a back-facing copy ('PBR6'):
   // 1, 1 without one. cube, when given, gets the reflection cube's file id ('PBR7'), 0
-  // without one.
+  // without one. shield, when given, gets the 32 floats of a kind 14 material's 'PBR8' trailer
+  // (all zero without one).
   int PortReadPBRMaterial(const int idx, float values[19], uint* wrap = nullptr,
-                          float lightScale[2] = nullptr, uint* cube = nullptr) const;
+                          float lightScale[2] = nullptr, uint* cube = nullptr, float* shield = nullptr) const;
   uint PortMaterialCount() const;
   // For a PBR material drawn by its embedded TEV: its emissive konst follows the room's
   // exposure as the PBR path's glow does (the converter bakes a fixed 0.10 there).

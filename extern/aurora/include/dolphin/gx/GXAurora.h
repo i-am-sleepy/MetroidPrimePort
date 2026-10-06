@@ -246,6 +246,12 @@ extern "C" {
 //   f32 back strength, f32 top strength
 #define GX_AURORA_SET_PBR_BACKLIGHT 0x0058
 
+// The constants of a PBR kind 14 material (Remastered's BoundaryShield; see GXSetPBRShield).
+// Stays in effect until changed.
+// Payload:
+//   8 x (f32 x, y, z, w)
+#define GX_AURORA_SET_PBR_SHIELD 0x005D
+
 // Port extension: Remastered's volumetric fog over the EFB as drawn so far (see
 // GXPortVolumetricFog). Queued like GX_AURORA_PORT_POST_PROCESS.
 // Payload:

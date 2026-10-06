@@ -1207,6 +1207,19 @@ void handle_aurora(ByteReader& reader) noexcept {
       g_gxState.pbrBacklightLights = value;
       g_gxState.dirty |= DirtyUniform;
     }
+  } else if (subCmd == GX_AURORA_SET_PBR_SHIELD) {
+    std::array<Vec4<float>, 8> value;
+    for (auto& row : value) {
+      const f32 x = reader.read<f32>();
+      const f32 y = reader.read<f32>();
+      const f32 z = reader.read<f32>();
+      const f32 w = reader.read<f32>();
+      row = Vec4<float>{x, y, z, w};
+    }
+    if (g_gxState.pbrShield != value) {
+      g_gxState.pbrShield = value;
+      g_gxState.dirty |= DirtyUniform;
+    }
   } else if (subCmd == GX_AURORA_SET_PBR_LIGHT_HDR) {
     const u32 bit = reader.read<u32>() & 0xFF;
     f32 v[8];

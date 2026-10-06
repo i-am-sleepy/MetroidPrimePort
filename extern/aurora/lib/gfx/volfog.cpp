@@ -115,7 +115,13 @@ fn cs_main(@builtin(global_invocation_id) id: vec3u) {
     if (p.misc.x != 0u) {
       let wv = vec4f(world, 1.0);
       let uvw = vec3f(dot(p.worldToVolume[0], wv), dot(p.worldToVolume[1], wv), dot(p.worldToVolume[2], wv));
-      light += textureSampleLevel(volMean, clampSamp, uvw, 0.0).rgb * p.colorB.w;
+      // Remastered's sampler has a black border (CLAMP_TO_BORDER) and unmapped tiles read 0,
+      // so froxels outside the baked grid get no light from it; the weight turns the
+      // clamp-to-edge sample into that.
+      let vsize = vec3f(textureDimensions(volMean));
+      let vt = uvw * vsize;
+      let vw = clamp(min(vt + 0.5, vsize + 0.5 - vt), vec3f(0.0), vec3f(1.0));
+      light += textureSampleLevel(volMean, clampSamp, uvw, 0.0).rgb * (vw.x * vw.y * vw.z) * p.colorB.w;
     } else {
       light += vec3f(p.colorB.w); // Remastered's default volume: one white texel
     }

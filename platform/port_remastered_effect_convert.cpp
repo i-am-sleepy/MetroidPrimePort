@@ -1,4 +1,5 @@
 #include "port_remastered_effect_convert.h"
+#include "port_bytes.h"
 
 #include <algorithm>
 #include <array>
@@ -195,14 +196,8 @@ Type TypeOfLetter(char letter) {
   }
 }
 
-uint32_t Le32(const uint8_t* p) { return uint32_t(p[0]) | uint32_t(p[1]) << 8 | uint32_t(p[2]) << 16 | uint32_t(p[3]) << 24; }
-
-void PutBe32(std::vector<uint8_t>& out, uint32_t value) {
-  out.push_back(uint8_t(value >> 24));
-  out.push_back(uint8_t(value >> 16));
-  out.push_back(uint8_t(value >> 8));
-  out.push_back(uint8_t(value));
-}
+using port::AppendBE32;
+using port::ReadLE32;
 
 uint32_t FloatBits(float value) {
   uint32_t bits;
@@ -656,12 +651,7 @@ struct Mati {
   std::map<std::string, std::array<float, 4>> vectors;
 };
 
-float Le32Float(const uint8_t* p) {
-  const uint32_t bits = Le32(p);
-  float value;
-  std::memcpy(&value, &bits, 4);
-  return value;
-}
+using port::ReadLEFloat;
 
 // The header's shader and the parameter entries (u8 type + four tag bytes +
 // payload): 6 texture (guid, texCoord, filter, wrap x/y/z; 36 bytes), 3 vec4,
@@ -671,7 +661,7 @@ bool ParseMati(const std::vector<uint8_t>& d, Mati& out) {
     return false;
   }
   out.shader = uint32_t(d[0x48]) << 24 | uint32_t(d[0x49]) << 16 | uint32_t(d[0x4a]) << 8 | d[0x4b];
-  const uint32_t count = Le32(d.data() + 0x69);
+  const uint32_t count = ReadLE32(d.data() + 0x69);
   size_t at = 0x6d;
   for (uint32_t i = 0; i < count && at + 5 <= d.size(); ++i) {
     const uint8_t type = d[at];
@@ -684,15 +674,15 @@ bool ParseMati(const std::vector<uint8_t>& d, Mati& out) {
     if (type == 6) {
       MatiTexture texture;
       std::memcpy(texture.guid.data(), d.data() + at, 16);
-      texture.texCoord = Le32(d.data() + at + 16);
-      texture.filter = int32_t(Le32(d.data() + at + 20));
-      texture.wrapX = int32_t(Le32(d.data() + at + 24));
-      texture.wrapY = int32_t(Le32(d.data() + at + 28));
+      texture.texCoord = ReadLE32(d.data() + at + 16);
+      texture.filter = int32_t(ReadLE32(d.data() + at + 20));
+      texture.wrapX = int32_t(ReadLE32(d.data() + at + 24));
+      texture.wrapY = int32_t(ReadLE32(d.data() + at + 28));
       out.textures[tag] = texture;
     } else if (type == 3) {
       std::array<float, 4> value;
       for (int c = 0; c < 4; ++c) {
-        value[size_t(c)] = Le32Float(d.data() + at + 4 * size_t(c));
+        value[size_t(c)] = ReadLEFloat(d.data() + at + 4 * size_t(c));
       }
       out.vectors[tag] = value;
     }
@@ -730,7 +720,7 @@ public:
         return Element(value.args[0], type, out, why);
       }
       if (value.args.size() == 2 && IsElement(value.args[0], F("MPAC")) && value.args[0].args.size() == 4) {
-        PutBe32(out, F("ANGC"));
+        AppendBE32(out, F("ANGC"));
         for (const EffectValue& arg : value.args[0].args) {
           if (!Element(arg, Type::Real, out, why)) {
             return false;
@@ -758,11 +748,11 @@ public:
       if (!ConeBias(value.args[0], xBias, why)) {
         return false;
       }
-      PutBe32(out, F("ANGC"));
-      PutBe32(out, F("CNST"));
-      PutBe32(out, xBias);
-      PutBe32(out, F("CNST"));
-      PutBe32(out, 0x80000000u);
+      AppendBE32(out, F("ANGC"));
+      AppendBE32(out, F("CNST"));
+      AppendBE32(out, xBias);
+      AppendBE32(out, F("CNST"));
+      AppendBE32(out, 0x80000000u);
       for (size_t i = 1; i < 4; ++i) {
         if (!Element(value.args[i], Type::Real, out, why)) {
           return false;
@@ -778,14 +768,14 @@ public:
       if (!ConeBias(value.args[1], xBias, why)) {
         return false;
       }
-      PutBe32(out, F("ASPH"));
+      AppendBE32(out, F("ASPH"));
       if (!Element(value.args[0], Type::Vector, out, why)) {
         return false;
       }
-      PutBe32(out, F("CNST"));
-      PutBe32(out, xBias);
-      PutBe32(out, F("CNST"));
-      PutBe32(out, 0x80000000u);
+      AppendBE32(out, F("CNST"));
+      AppendBE32(out, xBias);
+      AppendBE32(out, F("CNST"));
+      AppendBE32(out, 0x80000000u);
       for (size_t i = 2; i < 6; ++i) {
         if (!Element(value.args[i], Type::Real, out, why)) {
           return false;
@@ -797,10 +787,10 @@ public:
     // ANGC. Its spread is not uniform over the sphere as Remastered's may be.
     if (value.fourcc == F("RNDV") && type == Type::Vector && value.args.size() == 1) {
       m_approximated.push_back("RNDV taken as a whole-sphere ANGC");
-      PutBe32(out, F("ANGC"));
+      AppendBE32(out, F("ANGC"));
       for (float angle : {0.0f, 0.0f, 360.0f, 360.0f}) {
-        PutBe32(out, F("CNST"));
-        PutBe32(out, FloatBits(angle));
+        AppendBE32(out, F("CNST"));
+        AppendBE32(out, FloatBits(angle));
       }
       return Element(value.args[0], Type::Real, out, why);
     }
@@ -809,23 +799,23 @@ public:
     }
     // MPRD(a, b): a random int between two, as RAND.
     if (value.fourcc == F("MPRD") && value.args.size() == 2 && (type == Type::Int || type == Type::Real)) {
-      PutBe32(out, F("RAND"));
+      AppendBE32(out, F("RAND"));
       return Element(value.args[0], type, out, why) && Element(value.args[1], type, out, why);
     }
     // DFCP and DFCS scale a real by something retail cannot compute (they look
     // like fades with the camera's distance); they are taken as 1.
     if ((value.fourcc == F("DFCP") || value.fourcc == F("DFCS")) && type == Type::Real) {
       m_approximated.push_back(EffectFourCCString(value.fourcc) + " taken as 1");
-      PutBe32(out, F("CNST"));
-      PutBe32(out, FloatBits(1.0f));
+      AppendBE32(out, F("CNST"));
+      AppendBE32(out, FloatBits(1.0f));
       return true;
     }
     // GPUA is CREGPUAvailabilty, how much GPU time is free (to thin effects
     // out under load): taken as 1, all of it.
     if (value.fourcc == F("GPUA") && value.args.empty() && type == Type::Real) {
       m_approximated.push_back("GPUA taken as 1");
-      PutBe32(out, F("CNST"));
-      PutBe32(out, FloatBits(1.0f));
+      AppendBE32(out, F("CNST"));
+      AppendBE32(out, FloatBits(1.0f));
       return true;
     }
     // SPAF/SPAC/SPAV(#n, default) read an effect parameter the game passes in,
@@ -842,7 +832,7 @@ public:
       return false;
     }
     const std::string sig = found->second;
-    PutBe32(out, value.fourcc);
+    AppendBE32(out, value.fourcc);
     if (sig == "#") {
       return Literal(value, type, out, why);
     }
@@ -932,10 +922,10 @@ public:
     if (spin) {
       m_approximated.push_back("PMRQ: a camera-facing model's random spin left out");
     }
-    PutBe32(out, F("CNST"));
+    AppendBE32(out, F("CNST"));
     for (uint32_t angle : angles) {
-      PutBe32(out, F("CNST"));
-      PutBe32(out, (angle & 0x7fffffffu) != 0 ? angle ^ 0x80000000u : 0);
+      AppendBE32(out, F("CNST"));
+      AppendBE32(out, (angle & 0x7fffffffu) != 0 ? angle ^ 0x80000000u : 0);
     }
     return true;
   }
@@ -981,7 +971,7 @@ public:
       why = "a rotation order other than 0 (XYZ)";
       return false;
     }
-    PutBe32(out, F("CNST"));
+    AppendBE32(out, F("CNST"));
     for (size_t i = 0; i < 3; ++i) {
       if (UsesElement(reul->args[i], F("IRND"))) {
         why = "an angle with IRND";
@@ -1013,11 +1003,11 @@ public:
     }
     // How many percent of the life one pass over the gradient takes.
     float span = 0.0f;
-    if (at + 12 <= size && Le32(p + at) == F("ILPT") && Le32(p + at + 4) == F("CNST")) {
-      span = float(int32_t(Le32(p + at + 8)));
+    if (at + 12 <= size && ReadLE32(p + at) == F("ILPT") && ReadLE32(p + at + 4) == F("CNST")) {
+      span = float(int32_t(ReadLE32(p + at + 8)));
       at += 12;
-    } else if (at + 8 <= size && Le32(p + at) == F("CNST")) {
-      const float frames = float(int32_t(Le32(p + at + 4)));
+    } else if (at + 8 <= size && ReadLE32(p + at) == F("CNST")) {
+      const float frames = float(int32_t(ReadLE32(p + at + 4)));
       at += 8;
       if (m_lifetime > 0) {
         span = frames * 100.0f / float(m_lifetime);
@@ -1060,19 +1050,19 @@ public:
       }
       return color;
     };
-    PutBe32(out, F("KEYP"));
-    PutBe32(out, 1);   // percent of the particle's life
-    PutBe32(out, 0);
+    AppendBE32(out, F("KEYP"));
+    AppendBE32(out, 1);   // percent of the particle's life
+    AppendBE32(out, 0);
     out.push_back(0);  // no loop
     out.push_back(0);
-    PutBe32(out, 101);
-    PutBe32(out, 0);
-    PutBe32(out, 101);
+    AppendBE32(out, 101);
+    AppendBE32(out, 0);
+    AppendBE32(out, 101);
     for (int percent = 0; percent <= 100; ++percent) {
       float t = float(percent) / span;
       t = repeat ? t - std::floor(t) : std::min(t, 1.0f);
       for (float c : colorAt(t)) {
-        PutBe32(out, FloatBits(c));
+        AppendBE32(out, FloatBits(c));
       }
     }
     return true;
@@ -1086,11 +1076,11 @@ public:
     }
     const EffectValue& arg = value.args[0];
     if (arg.kind == EffectValue::Kind::Word) {
-      PutBe32(out, arg.word);
+      AppendBE32(out, arg.word);
       return true;
     }
     if (arg.kind == EffectValue::Kind::Byte) {
-      PutBe32(out, type == Type::Int ? arg.word : FloatBits(float(arg.word)));
+      AppendBE32(out, type == Type::Int ? arg.word : FloatBits(float(arg.word)));
       return true;
     }
     why = "CNST holding neither a number nor a byte";
@@ -1107,7 +1097,7 @@ public:
       why = "not a flag";
       return false;
     }
-    PutBe32(out, F("CNST"));
+    AppendBE32(out, F("CNST"));
     out.push_back(byte->word != 0 ? 1 : 0);
     return true;
   }
@@ -1122,7 +1112,7 @@ public:
       return false;
     }
     const uint8_t* p = m_data + value.offset;
-    const uint32_t count = Le32(p + 18);
+    const uint32_t count = ReadLE32(p + 18);
     const size_t keys = value.size - 22;
     const size_t want = type == Type::Color ? 16 : type == Type::Vector ? 12 : 4;
     const size_t keySize = count == 0 ? want : keys / count;
@@ -1131,21 +1121,21 @@ public:
       why = "keyframes of " + std::to_string(keySize) + " bytes where retail reads " + std::to_string(want);
       return false;
     }
-    PutBe32(out, Le32(p));
-    PutBe32(out, Le32(p + 4));
+    AppendBE32(out, ReadLE32(p));
+    AppendBE32(out, ReadLE32(p + 4));
     out.push_back(p[8]);
     out.push_back(p[9]);
-    PutBe32(out, Le32(p + 10));
-    PutBe32(out, Le32(p + 14));
-    PutBe32(out, count);
+    AppendBE32(out, ReadLE32(p + 10));
+    AppendBE32(out, ReadLE32(p + 14));
+    AppendBE32(out, count);
     if (halves) {
       for (size_t at = 22; at < value.size; at += 2) {
-        PutBe32(out, FloatBits(HalfToFloat(uint16_t(p[at] | p[at + 1] << 8))));
+        AppendBE32(out, FloatBits(HalfToFloat(uint16_t(p[at] | p[at + 1] << 8))));
       }
       return true;
     }
     for (size_t at = 22; at < value.size; at += 4) {
-      PutBe32(out, Le32(p + at));
+      AppendBE32(out, ReadLE32(p + at));
     }
     return true;
   }
@@ -1153,12 +1143,12 @@ public:
   // An id, bare or as CNST(id); NONE is no asset.
   bool Asset(const std::vector<EffectValue>& value, uint32_t type, std::vector<uint8_t>& out, std::string& why) const {
     if (value.size() == 1 && IsElement(value[0], F("NONE"))) {
-      PutBe32(out, F("NONE"));
+      AppendBE32(out, F("NONE"));
       return true;
     }
     // A zero id names nothing, as NONE does.
     if (value.size() == 1 && value[0].kind == EffectValue::Kind::Guid && value[0].guid == EffectGuid{}) {
-      PutBe32(out, F("NONE"));
+      AppendBE32(out, F("NONE"));
       return true;
     }
     const EffectValue* guid = nullptr;
@@ -1179,8 +1169,8 @@ public:
       why = EffectFourCCString(type) + " " + EffectGuidString(guid->guid) + " has no retail id";
       return false;
     }
-    PutBe32(out, F("CNST"));
-    PutBe32(out, id);
+    AppendBE32(out, F("CNST"));
+    AppendBE32(out, id);
     return true;
   }
 
@@ -1260,12 +1250,12 @@ public:
       mode = 1;
       flip = mirror ? 1 : 0;
     }
-    PutBe32(out, F("PATL"));
-    PutBe32(out, F("CNST"));
-    PutBe32(out, id);
+    AppendBE32(out, F("PATL"));
+    AppendBE32(out, F("CNST"));
+    AppendBE32(out, id);
     for (const int32_t v : {cols, rows, count, mode, flip}) {
-      PutBe32(out, F("CNST"));
-      PutBe32(out, uint32_t(v));
+      AppendBE32(out, F("CNST"));
+      AppendBE32(out, uint32_t(v));
     }
     return true;
   }
@@ -1281,7 +1271,7 @@ public:
     }
     const EffectValue& array = value[0].args[1].args[0];
     const uint8_t* p = m_data + array.offset;
-    const uint32_t count = array.size >= 4 ? Le32(p) : 0;
+    const uint32_t count = array.size >= 4 ? ReadLE32(p) : 0;
     if (count == 0 || count != high + 1 || array.size != 4 + size_t(count) * 20) {
       why = "SLCT over " + std::to_string(count) + " models with a range of " + std::to_string(high);
       return false;
@@ -1290,7 +1280,7 @@ public:
       const uint8_t* entry = p + 4 + size_t(i) * 20;
       EffectGuid guid;
       std::memcpy(guid.data(), entry + 4, 16);
-      if (Le32(entry) != F("CNST")) {
+      if (ReadLE32(entry) != F("CNST")) {
         why = "SLCT model that is not a constant";
         return false;
       }
@@ -1313,7 +1303,7 @@ public:
     }
     const EffectValue& head = value[0];
     if (head.fourcc == F("NONE")) {
-      PutBe32(out, F("NONE"));
+      AppendBE32(out, F("NONE"));
       return true;
     }
     if (head.fourcc == F("TXP2") || head.fourcc == F("TXFB") || head.fourcc == F("ATX2")) {
@@ -1329,9 +1319,9 @@ public:
       why = "TXTR " + EffectGuidString(head.args[0].guid) + " has no retail id";
       return false;
     }
-    PutBe32(out, head.fourcc);
-    PutBe32(out, F("CNST"));
-    PutBe32(out, id);
+    AppendBE32(out, head.fourcc);
+    AppendBE32(out, F("CNST"));
+    AppendBE32(out, id);
     if (!animated) {
       return true;
     }
@@ -1380,8 +1370,8 @@ public:
           return false;
         }
         static constexpr uint32_t kLightType[4] = {0, 2, 1, 3};
-        PutBe32(out, F("CNST"));
-        PutBe32(out, fourcc == F("LTYP") ? kLightType[byte->word] : byte->word);
+        AppendBE32(out, F("CNST"));
+        AppendBE32(out, fourcc == F("LTYP") ? kLightType[byte->word] : byte->word);
         return true;
       }
     }
@@ -1400,8 +1390,8 @@ public:
                (c.args[0].kind == EffectValue::Kind::Word || c.args[0].kind == EffectValue::Kind::Byte);
       };
       auto putLess = [&out](const EffectValue& c) {
-        PutBe32(out, F("CNST"));
-        PutBe32(out, c.args[0].word == 0 ? 0 : c.args[0].word - 1);
+        AppendBE32(out, F("CNST"));
+        AppendBE32(out, c.args[0].word == 0 ? 0 : c.args[0].word - 1);
       };
       if (constant(v)) {
         putLess(v);
@@ -1409,36 +1399,36 @@ public:
       }
       if ((IsElement(v, F("IRND")) || IsElement(v, F("RAND")) || IsElement(v, F("MPRD"))) && v.args.size() == 2 &&
           constant(v.args[0]) && constant(v.args[1])) {
-        PutBe32(out, v.fourcc == F("MPRD") ? F("RAND") : v.fourcc);
+        AppendBE32(out, v.fourcc == F("MPRD") ? F("RAND") : v.fourcc);
         putLess(v.args[0]);
         putLess(v.args[1]);
         return true;
       }
-      PutBe32(out, F("SUB_"));
+      AppendBE32(out, F("SUB_"));
       if (!Element(v, Type::Int, out, why)) {
         return false;
       }
-      PutBe32(out, F("CNST"));
-      PutBe32(out, 1);
+      AppendBE32(out, F("CNST"));
+      AppendBE32(out, 1);
       return true;
     }
     if (fourcc == F("ROTA")) {
       const EffectValue& v = value[0];
       if (IsElement(v, F("CNST")) && v.args.size() == 1 && v.args[0].kind == EffectValue::Kind::Word) {
-        PutBe32(out, F("CNST"));
-        PutBe32(out, v.args[0].word ^ 0x80000000u);
+        AppendBE32(out, F("CNST"));
+        AppendBE32(out, v.args[0].word ^ 0x80000000u);
         return true;
       }
       if (IsElement(v, F("MULT")) && v.args.size() == 2 && IsElement(v.args[1], F("CNST")) && v.args[1].args.size() == 1 &&
           v.args[1].args[0].kind == EffectValue::Kind::Word && v.args[1].args[0].word == FloatBits(-1.0f)) {
         return Element(v.args[0], Type::Real, out, why);
       }
-      PutBe32(out, F("MULT"));
+      AppendBE32(out, F("MULT"));
       if (!Element(v, Type::Real, out, why)) {
         return false;
       }
-      PutBe32(out, F("CNST"));
-      PutBe32(out, FloatBits(-1.0f));
+      AppendBE32(out, F("CNST"));
+      AppendBE32(out, FloatBits(-1.0f));
       return true;
     }
     return Element(value[0], type.type, out, why);
@@ -1516,18 +1506,18 @@ public:
     if (frames.empty()) {
       return true;
     }
-    PutBe32(out, F("CNST"));
+    AppendBE32(out, F("CNST"));
     for (uint32_t word : {0u, 1u, table.header[2], 0u}) {
-      PutBe32(out, word);
+      AppendBE32(out, word);
     }
-    PutBe32(out, uint32_t(frames.size()));
+    AppendBE32(out, uint32_t(frames.size()));
     for (const auto& [frame, ids] : frames) {
-      PutBe32(out, frame);
-      PutBe32(out, uint32_t(ids.size()));
+      AppendBE32(out, frame);
+      AppendBE32(out, uint32_t(ids.size()));
       for (uint32_t id : ids) {
-        PutBe32(out, id);
+        AppendBE32(out, id);
         for (int i = 0; i < 3; ++i) {
-          PutBe32(out, 0);
+          AppendBE32(out, 0);
         }
       }
     }
@@ -1575,9 +1565,9 @@ public:
       return;
     }
     if (mode == 3 || mode == 4) {
-      PutBe32(out, F("XFMD"));
-      PutBe32(out, F("CNST"));
-      PutBe32(out, mode);
+      AppendBE32(out, F("XFMD"));
+      AppendBE32(out, F("CNST"));
+      AppendBE32(out, mode);
     } else if (mode != 1 && mode != 2 && mode != 5) {
       m_approximated.push_back("XFMD " + std::to_string(mode) + " drawn as retail");
     }
@@ -1589,9 +1579,9 @@ public:
 
   // The count-prefixed list `CNST n, items` of a port-only property.
   static void PutList(std::vector<uint8_t>& out, uint32_t fourcc, uint32_t count, const std::vector<uint8_t>& items) {
-    PutBe32(out, fourcc);
-    PutBe32(out, F("CNST"));
-    PutBe32(out, count);
+    AppendBE32(out, fourcc);
+    AppendBE32(out, F("CNST"));
+    AppendBE32(out, count);
     out.insert(out.end(), items.begin(), items.end());
   }
 
@@ -1688,34 +1678,34 @@ public:
 
     // The blob.
     std::vector<uint8_t> blob;
-    PutBe32(blob, 2);
-    PutBe32(blob, recipe->features);
-    PutBe32(blob, blend);
-    PutBe32(blob, uint32_t(slots.size()));
+    AppendBE32(blob, 2);
+    AppendBE32(blob, recipe->features);
+    AppendBE32(blob, blend);
+    AppendBE32(blob, uint32_t(slots.size()));
     int32_t slotOf[7] = {-1, -1, -1, -1, -1, -1, -1};
     for (size_t i = 0; i < slots.size(); ++i) {
       const Slot& slot = slots[i];
       slotOf[size_t(slot.spec->role)] = int32_t(i);
-      PutBe32(blob, slot.atlas.id);
-      PutBe32(blob, slot.texture.texCoord);
-      PutBe32(blob, WrapOf(slot.texture.wrapX));
-      PutBe32(blob, WrapOf(slot.texture.wrapY));
-      PutBe32(blob, slot.texture.filter != 0 ? 1 : 0);
-      PutBe32(blob, uint32_t(std::max(slot.atlas.cols, 1)));
-      PutBe32(blob, uint32_t(std::max(slot.atlas.rows, 1)));
-      PutBe32(blob, uint32_t(std::max(slot.atlas.frames, 1)));
+      AppendBE32(blob, slot.atlas.id);
+      AppendBE32(blob, slot.texture.texCoord);
+      AppendBE32(blob, WrapOf(slot.texture.wrapX));
+      AppendBE32(blob, WrapOf(slot.texture.wrapY));
+      AppendBE32(blob, slot.texture.filter != 0 ? 1 : 0);
+      AppendBE32(blob, uint32_t(std::max(slot.atlas.cols, 1)));
+      AppendBE32(blob, uint32_t(std::max(slot.atlas.rows, 1)));
+      AppendBE32(blob, uint32_t(std::max(slot.atlas.frames, 1)));
       const bool warped = slot.spec->warpU >= 0;
-      PutBe32(blob, warped ? 1 : 0);
-      PutBe32(blob, FloatBits(warped ? cch0[size_t(slot.spec->warpU)] : 0.0f));
-      PutBe32(blob, FloatBits(warped ? cch0[size_t(slot.spec->warpV)] : 0.0f));
+      AppendBE32(blob, warped ? 1 : 0);
+      AppendBE32(blob, FloatBits(warped ? cch0[size_t(slot.spec->warpU)] : 0.0f));
+      AppendBE32(blob, FloatBits(warped ? cch0[size_t(slot.spec->warpV)] : 0.0f));
     }
     for (const Role role : {Role::Color, Role::Opacity, Role::Ramp, Role::Ramp2, Role::Threshold, Role::Indirect,
                             Role::Palette}) {
-      PutBe32(blob, uint32_t(slotOf[size_t(role)]));
+      AppendBE32(blob, uint32_t(slotOf[size_t(role)]));
     }
-    PutBe32(blob, 0);             // rampRow[2]
-    PutBe32(blob, 1);
-    PutBe32(blob, uint32_t(recipe->addRow));
+    AppendBE32(blob, 0);             // rampRow[2]
+    AppendBE32(blob, 1);
+    AppendBE32(blob, uint32_t(recipe->addRow));
     int32_t srcRow[kSrcCount], srcComp[kSrcCount];
     float srcValue[kSrcCount];
     for (int i = 0; i < kSrcCount; ++i) {
@@ -1731,17 +1721,17 @@ public:
       }
     }
     for (int i = 0; i < kSrcCount; ++i) {
-      PutBe32(blob, uint32_t(srcRow[i]));
-      PutBe32(blob, uint32_t(srcComp[i]));
-      PutBe32(blob, FloatBits(srcValue[i]));
+      AppendBE32(blob, uint32_t(srcRow[i]));
+      AppendBE32(blob, uint32_t(srcComp[i]));
+      AppendBE32(blob, FloatBits(srcValue[i]));
     }
-    PutBe32(blob, FloatBits(1.0f));  // modulate
-    PutBe32(blob, FloatBits(0.0f));  // depthSoften
-    PutBe32(blob, spriteCenter);
+    AppendBE32(blob, FloatBits(1.0f));  // modulate
+    AppendBE32(blob, FloatBits(0.0f));  // depthSoften
+    AppendBE32(blob, spriteCenter);
 
-    PutBe32(result.part, F("VMAT"));
-    PutBe32(result.part, F("CNST"));
-    PutBe32(result.part, uint32_t(blob.size()));
+    AppendBE32(result.part, F("VMAT"));
+    AppendBE32(result.part, F("CNST"));
+    AppendBE32(result.part, uint32_t(blob.size()));
     result.part.insert(result.part.end(), blob.begin(), blob.end());
 
     // VTMT: one TRSS per UV set (A-F), up to three.
@@ -1806,9 +1796,9 @@ public:
           result.dropped.push_back("PMTR: " + why);
           continue;
         }
-        PutBe32(items, kind);
-        PutBe32(items, row);
-        PutBe32(items, comp);
+        AppendBE32(items, kind);
+        AppendBE32(items, row);
+        AppendBE32(items, comp);
         items.insert(items.end(), element.begin(), element.end());
         ++count;
       }
@@ -1855,8 +1845,8 @@ public:
           continue;
         }
         for (const uint32_t target : targets) {
-          PutBe32(items, target);
-          PutBe32(items, 0);
+          AppendBE32(items, target);
+          AppendBE32(items, 0);
           items.insert(items.end(), element.begin(), element.end());
           ++count;
         }
@@ -1876,7 +1866,7 @@ public:
       std::vector<uint8_t> bytes;
       std::string why;
       if (property->value.size() == 1 && Element(property->value[0], Type::Real, bytes, why)) {
-        PutBe32(result.part, fourcc);
+        AppendBE32(result.part, fourcc);
         result.part.insert(result.part.end(), bytes.begin(), bytes.end());
       } else {
         result.dropped.push_back(name + ": " + (why.empty() ? "not one element" : why));
@@ -1889,9 +1879,9 @@ public:
         orient = 0;
       }
     }
-    PutBe32(result.part, F("VORN"));
-    PutBe32(result.part, F("CNST"));
-    PutBe32(result.part, orient);
+    AppendBE32(result.part, F("VORN"));
+    AppendBE32(result.part, F("CNST"));
+    AppendBE32(result.part, orient);
     return true;
   }
 
@@ -1902,7 +1892,7 @@ public:
     result.type = type;
     result.root = node.root;
     std::vector<uint8_t>& out = result.part;
-    PutBe32(out, HeaderOf(type));
+    AppendBE32(out, HeaderOf(type));
     const auto& retail = PropertiesOf(type);
     const bool part = type == F("PART");
     // Swooshes: SBDM is Remastered's blend mode, 0 or 1, which retail has as
@@ -1961,8 +1951,8 @@ public:
         if (mode == nullptr || (mode->kind != EffectValue::Kind::Byte && mode->kind != EffectValue::Kind::Word)) {
           result.dropped.push_back("PBDM: not a constant");
         } else if (mode->word == 2) {
-          PutBe32(out, F("AAPH"));
-          PutBe32(out, F("CNST"));
+          AppendBE32(out, F("AAPH"));
+          AppendBE32(out, F("CNST"));
           out.push_back(1);
         } else if (mode->word != 0) {
           m_approximated.push_back("PBDM " + std::to_string(mode->word) + " taken as alpha blending");
@@ -1986,7 +1976,7 @@ public:
           result.dropped.push_back("KSSM: " + why);
           ++result.droppedRetail;
         } else if (!bytes.empty()) {
-          PutBe32(out, fourcc);
+          AppendBE32(out, fourcc);
           out.insert(out.end(), bytes.begin(), bytes.end());
         }
         continue;
@@ -1997,13 +1987,13 @@ public:
         if (FacingRotation(property.value, bytes)) {
           faceCamera = true;
           written.insert(F("PMRT"));
-          PutBe32(out, F("PMRT"));
+          AppendBE32(out, F("PMRT"));
           out.insert(out.end(), bytes.begin(), bytes.end());
         } else if (!ModelRotation(property.value, bytes, why)) {
           result.dropped.push_back("PMRQ: " + why);
         } else {
           written.insert(F("PMRT"));
-          PutBe32(out, F("PMRT"));
+          AppendBE32(out, F("PMRT"));
           out.insert(out.end(), bytes.begin(), bytes.end());
         }
         continue;
@@ -2039,15 +2029,15 @@ public:
           continue;
         }
         pmdlVariants = true;
-        PutBe32(out, F("PMDL"));
-        PutBe32(out, F("CNST"));
-        PutBe32(out, ids[0]);
-        PutBe32(out, F("PMDV"));
-        PutBe32(out, F("CNST"));
-        PutBe32(out, uint32_t(ids.size()));
+        AppendBE32(out, F("PMDL"));
+        AppendBE32(out, F("CNST"));
+        AppendBE32(out, ids[0]);
+        AppendBE32(out, F("PMDV"));
+        AppendBE32(out, F("CNST"));
+        AppendBE32(out, uint32_t(ids.size()));
         for (const uint32_t id : ids) {
-          PutBe32(out, F("CNST"));
-          PutBe32(out, id);
+          AppendBE32(out, F("CNST"));
+          AppendBE32(out, id);
         }
         continue;
       }
@@ -2063,13 +2053,13 @@ public:
         pmdl = uint32_t(bytes[4]) << 24 | uint32_t(bytes[5]) << 16 | uint32_t(bytes[6]) << 8 | bytes[7];
       }
       written.insert(fourcc);
-      PutBe32(out, fourcc);
+      AppendBE32(out, fourcc);
       out.insert(out.end(), bytes.begin(), bytes.end());
     }
     if (drawsNothing || modelsOnly) {
-      PutBe32(out, F("SIZE"));
-      PutBe32(out, F("CNST"));
-      PutBe32(out, FloatBits(0.0f));
+      AppendBE32(out, F("SIZE"));
+      AppendBE32(out, F("CNST"));
+      AppendBE32(out, FloatBits(0.0f));
     }
     // A material instance draws with its texture where there is no TEXR.
     if (material != nullptr && !texture) {
@@ -2081,10 +2071,10 @@ public:
       }
       const uint32_t id = guid != nullptr && m_io.materialTexture ? m_io.materialTexture(guid->guid) : 0;
       if (id != 0) {
-        PutBe32(out, F("TEXR"));
-        PutBe32(out, F("CNST"));
-        PutBe32(out, F("CNST"));
-        PutBe32(out, id);
+        AppendBE32(out, F("TEXR"));
+        AppendBE32(out, F("CNST"));
+        AppendBE32(out, F("CNST"));
+        AppendBE32(out, id);
       } else {
         result.dropped.push_back("MTIN: no texture for its material");
         ++result.droppedRetail;
@@ -2107,29 +2097,29 @@ public:
       // VMSH: the converted PMDL as one mesh, so the model particle draws through the VMAT.
       const std::vector<uint8_t> mesh = m_io.modelMesh(pmdl);
       if (!mesh.empty()) {
-        PutBe32(out, F("VMSH"));
-        PutBe32(out, F("CNST"));
-        PutBe32(out, uint32_t(mesh.size()));
+        AppendBE32(out, F("VMSH"));
+        AppendBE32(out, F("CNST"));
+        AppendBE32(out, uint32_t(mesh.size()));
         out.insert(out.end(), mesh.begin(), mesh.end());
       }
     }
     // The first swoosh and electric child the spawn table starts, where the
     // generator has none of its own.
-    for (const auto [type, child, frame] : {std::tuple(F("SWHC"), F("SSWH"), F("SSSD")),
-                                             std::tuple(F("ELSC"), F("SELC"), F("SESD"))}) {
+    for (const auto& [type, child, frame] : {std::tuple(F("SWHC"), F("SSWH"), F("SSSD")),
+                                              std::tuple(F("ELSC"), F("SELC"), F("SESD"))}) {
       size_t count = 0;
       for (const Started& each : started) {
         if (each.type != type) {
           continue;
         }
         if (count++ == 0 && written.count(child) == 0) {
-          PutBe32(out, child);
-          PutBe32(out, F("CNST"));
-          PutBe32(out, each.id);
+          AppendBE32(out, child);
+          AppendBE32(out, F("CNST"));
+          AppendBE32(out, each.id);
           if (written.count(frame) == 0) {
-            PutBe32(out, frame);
-            PutBe32(out, F("CNST"));
-            PutBe32(out, each.frame);
+            AppendBE32(out, frame);
+            AppendBE32(out, F("CNST"));
+            AppendBE32(out, each.frame);
           } else if (each.frame != 0) {
             m_approximated.push_back("KSSM: " + EffectFourCCString(child) + " frame kept from " +
                                      EffectFourCCString(frame));
@@ -2142,18 +2132,18 @@ public:
     }
     if (faceCamera) {
       // Port-only: the model particles face the camera (xPortFaceCamera; see FacingRotation).
-      PutBe32(out, F("PFCM"));
-      PutBe32(out, F("CNST"));
-      PutBe32(out, 1);
+      AppendBE32(out, F("PFCM"));
+      AppendBE32(out, F("CNST"));
+      AppendBE32(out, 1);
     }
     if (part) {
       // Port-only: nested IRND elements are evaluated once per particle and element, not at frame 0
       // only (xPortIrnd). Marks every converted PART; retail's own PARTs do not have it.
-      PutBe32(out, F("PIRN"));
-      PutBe32(out, F("CNST"));
-      PutBe32(out, 1);
+      AppendBE32(out, F("PIRN"));
+      AppendBE32(out, F("CNST"));
+      AppendBE32(out, 1);
     }
-    PutBe32(out, F("_END"));
+    AppendBE32(out, F("_END"));
     result.approximated = std::move(m_approximated);
     m_approximated.clear();
     return result;
@@ -2179,7 +2169,7 @@ private:
 };
 
 
-uint32_t Be32(const uint8_t* p) { return uint32_t(p[0]) << 24 | uint32_t(p[1]) << 16 | uint32_t(p[2]) << 8 | uint32_t(p[3]); }
+using port::ReadBE32;
 
 // Walks a retail PART the way CParticleDataFactory reads it.
 class RetailReader {
@@ -2192,7 +2182,7 @@ public:
     if (m_at + 4 > m_size) {
       return false;
     }
-    out = Be32(m_data + m_at);
+    out = ReadBE32(m_data + m_at);
     m_at += 4;
     return true;
   }

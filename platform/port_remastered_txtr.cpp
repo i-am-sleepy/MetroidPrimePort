@@ -36,6 +36,7 @@
 //     against it.
 
 #include "port_remastered_txtr.h"
+#include "port_bytes.h"
 
 #include <algorithm>
 #include <cmath>
@@ -46,19 +47,9 @@
 namespace PortRemastered {
 namespace {
 
-uint32_t ReadLE32(const uint8_t* p) {
-  return uint32_t(p[0]) | (uint32_t(p[1]) << 8) | (uint32_t(p[2]) << 16) | (uint32_t(p[3]) << 24);
-}
-
-// A FourCC is four ASCII bytes in the file, so it is read big endian to be
-// printable and comparable as one number.
-uint32_t ReadFourCC(const uint8_t* p) {
-  return (uint32_t(p[0]) << 24) | (uint32_t(p[1]) << 16) | (uint32_t(p[2]) << 8) | uint32_t(p[3]);
-}
-
-uint64_t ReadLE64(const uint8_t* p) {
-  return uint64_t(ReadLE32(p)) | (uint64_t(ReadLE32(p + 4)) << 32);
-}
+using port::ReadBE32;
+using port::ReadLE32;
+using port::ReadLE64;
 
 // A form or chunk range in the file, both of which start with a header that
 // may be followed by padding (`skip` for a chunk) before the payload.
@@ -84,7 +75,7 @@ bool TakeForm(const uint8_t* data, size_t size, uint32_t& id, Slice& body, size_
     error = "remastered txtr: truncated form header";
     return false;
   }
-  if (ReadFourCC(data) != kFormRFRM) {
+  if (ReadBE32(data) != kFormRFRM) {
     error = "remastered txtr: not an RFRM form";
     return false;
   }
@@ -94,7 +85,7 @@ bool TakeForm(const uint8_t* data, size_t size, uint32_t& id, Slice& body, size_
             std::to_string(size - kFormSize) + " are here";
     return false;
   }
-  id = ReadFourCC(data + 20);
+  id = ReadBE32(data + 20);
   body.data = data + kFormSize;
   body.size = size_t(bodySize);
   consumed = kFormSize + size_t(bodySize);
@@ -109,7 +100,7 @@ bool TakeChunk(const uint8_t* data, size_t size, uint32_t& id, Slice& body, size
     error = "remastered txtr: truncated chunk header";
     return false;
   }
-  const uint32_t chunkId = ReadFourCC(data);
+  const uint32_t chunkId = ReadBE32(data);
   const uint64_t bodySize = ReadLE64(data + 4);
   const uint64_t skip = ReadLE64(data + 16);
   const uint64_t start = uint64_t(kChunkSize) + skip;

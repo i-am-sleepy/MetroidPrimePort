@@ -31,6 +31,7 @@ struct MaterialDecision {
   double strength = 0.0;    // the kind's strength
   double p[4] = {0, 0, 0, 0};
   std::string cube;         // the reflection cube's id (8 hex digits), or "-"
+  std::string retail;       // the retail material it stands on: "blendSrc,blendDst 0xflags"
 };
 
 // One row of the effects report: what became of one Remastered effect, and why. A GENP with

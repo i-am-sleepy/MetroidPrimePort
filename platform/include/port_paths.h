@@ -9,7 +9,7 @@
 // (MigrateLooseData). In order:
 //   1. MP_USER_PATH, when set.
 //   2. Android: the folder in shared storage the player moved the data to
-//      (F1 > Extras > Data folder, port_data_folder.h) when it can be written
+//      (F1 > System > Data folder, port_data_folder.h) when it can be written
 //      to, else the app's private storage (the executable is inside the APK).
 //   3. user/ in the executable's folder - for an AppImage, the folder the
 //      .AppImage file is in, with no user/ - when the folder can be written to.

@@ -3,6 +3,8 @@
 // derivation follow hactool (ISC licence), which is the reference for both.
 
 #include "port_remastered_nsp.h"
+#include "port_strings.h"
+#include "port_bytes.h"
 
 #include "port_remastered_nso.h"
 
@@ -98,24 +100,10 @@ constexpr uint32_t kMaxPfs0Files = 4096;
 constexpr uint32_t kMaxPfs0Strings = 1u << 20;
 constexpr uint64_t kMaxRomfsTable = 256u << 20;
 
-uint32_t ReadLE32(const uint8_t* p) {
-  return uint32_t(p[0]) | (uint32_t(p[1]) << 8) | (uint32_t(p[2]) << 16) | (uint32_t(p[3]) << 24);
-}
+using port::ReadLE32;
+using port::ReadLE64;
 
-uint64_t ReadLE64(const uint8_t* p) { return uint64_t(ReadLE32(p)) | (uint64_t(ReadLE32(p + 4)) << 32); }
-
-int HexDigit(char c) {
-  if (c >= '0' && c <= '9') {
-    return c - '0';
-  }
-  if (c >= 'a' && c <= 'f') {
-    return c - 'a' + 10;
-  }
-  if (c >= 'A' && c <= 'F') {
-    return c - 'A' + 10;
-  }
-  return -1;
-}
+using port::HexDigit;
 
 // Wipes key material when the scope ends, so no exit path forgets to.
 struct Wipe {

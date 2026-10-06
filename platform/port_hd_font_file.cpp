@@ -2,6 +2,7 @@
 
 #define PORT_HD_FONT_FILE_ONLY
 #include "port_hd_font.h"
+#include "port_bytes.h"
 
 #include <algorithm>
 #include <cctype>
@@ -18,25 +19,10 @@ constexpr size_t kHeaderSize = 28;
 constexpr size_t kGlyphSize = 40;
 constexpr uint32_t kMaxAtlasSide = 8192;
 
-void PutU32(std::vector<uint8_t>& out, uint32_t value) {
-  for (int i = 0; i < 4; ++i) {
-    out.push_back(uint8_t(value >> (8 * i)));
-  }
-}
-void PutF32(std::vector<uint8_t>& out, float value) {
-  uint32_t bits;
-  std::memcpy(&bits, &value, 4);
-  PutU32(out, bits);
-}
-uint32_t GetU32(const uint8_t* data) {
-  return uint32_t(data[0]) | uint32_t(data[1]) << 8 | uint32_t(data[2]) << 16 | uint32_t(data[3]) << 24;
-}
-float GetF32(const uint8_t* data) {
-  const uint32_t bits = GetU32(data);
-  float value;
-  std::memcpy(&value, &bits, 4);
-  return value;
-}
+using port::AppendLE32;
+using port::AppendLEFloat;
+using port::ReadLE32;
+using port::ReadLEFloat;
 
 }  // namespace
 
@@ -70,17 +56,17 @@ bool WriteFont(const Font& font, std::vector<uint8_t>& out) {
             [](const Glyph& a, const Glyph& b) { return a.character < b.character; });
   out.clear();
   out.insert(out.end(), kMagic, kMagic + 4);
-  PutU32(out, kVersion);
-  PutU32(out, font.width);
-  PutU32(out, font.height);
-  PutF32(out, font.padding);
-  PutF32(out, font.perPixel);
-  PutU32(out, uint32_t(glyphs.size()));
+  AppendLE32(out, kVersion);
+  AppendLE32(out, font.width);
+  AppendLE32(out, font.height);
+  AppendLEFloat(out, font.padding);
+  AppendLEFloat(out, font.perPixel);
+  AppendLE32(out, uint32_t(glyphs.size()));
   for (const Glyph& glyph : glyphs) {
-    PutU32(out, glyph.character);
+    AppendLE32(out, glyph.character);
     for (const float value : {glyph.left, glyph.top, glyph.width, glyph.height, glyph.u0, glyph.v0, glyph.u1,
                               glyph.v1, glyph.advance}) {
-      PutF32(out, value);
+      AppendLEFloat(out, value);
     }
   }
   out.insert(out.end(), font.distance.begin(), font.distance.end());
@@ -92,16 +78,16 @@ bool ReadFont(const uint8_t* data, size_t size, Font& out, std::string& error) {
     error = "not a distance-field font";
     return false;
   }
-  if (GetU32(data + 4) != kVersion) {
+  if (ReadLE32(data + 4) != kVersion) {
     error = "made for another version of the port";
     return false;
   }
   out = {};
-  out.width = GetU32(data + 8);
-  out.height = GetU32(data + 12);
-  out.padding = GetF32(data + 16);
-  out.perPixel = GetF32(data + 20);
-  const uint32_t count = GetU32(data + 24);
+  out.width = ReadLE32(data + 8);
+  out.height = ReadLE32(data + 12);
+  out.padding = ReadLEFloat(data + 16);
+  out.perPixel = ReadLEFloat(data + 20);
+  const uint32_t count = ReadLE32(data + 24);
   if (out.width == 0 || out.height == 0 || out.width > kMaxAtlasSide || out.height > kMaxAtlasSide ||
       count == 0 || count > (size - kHeaderSize) / kGlyphSize ||
       size - kHeaderSize - size_t(count) * kGlyphSize != size_t(out.width) * out.height) {
@@ -111,11 +97,11 @@ bool ReadFont(const uint8_t* data, size_t size, Font& out, std::string& error) {
   out.glyphs.resize(count);
   const uint8_t* at = data + kHeaderSize;
   for (Glyph& glyph : out.glyphs) {
-    glyph.character = GetU32(at);
+    glyph.character = ReadLE32(at);
     float* const fields[] = {&glyph.left, &glyph.top, &glyph.width, &glyph.height, &glyph.u0,
                              &glyph.v0,   &glyph.u1,  &glyph.v1,    &glyph.advance};
     for (size_t i = 0; i < 9; ++i) {
-      *fields[i] = GetF32(at + 4 + 4 * i);
+      *fields[i] = ReadLEFloat(at + 4 + 4 * i);
       if (!std::isfinite(*fields[i])) {
         error = "a glyph is not a number";
         return false;

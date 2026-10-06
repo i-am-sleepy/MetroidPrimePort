@@ -14,6 +14,10 @@
 
 #include <float.h>
 
+#ifdef TARGET_PC
+#include "port_debug.h"
+#endif
+
 static const char* const skBaseWidgetNames[] = {"BaseWidget_VisorMenu", "BaseWidget_BeamMenu"};
 static const char* const skMenuTitleWidgetNames[] = {"TextPane_VisorMenu", "TextPane_BeamMenu"};
 static const char* const skBaseTitleWidgetNames[] = {"basewidget_visormenutitle",
@@ -122,6 +126,16 @@ void CHudVisorBeamMenu::UpdateHudAlpha(float alpha) {
 }
 
 void CHudVisorBeamMenu::Update(float dt, const bool init) {
+#ifdef TARGET_PC
+  {
+    // The touch wheels draw these icons (a no-op once all four are taken).
+    CGuiModel* icons[4];
+    for (int i = 0; i < 4; ++i) {
+      icons[i] = x28_menuItems[i].x4_model_icon;
+    }
+    PortDebug::CaptureWheelIcons(x4_type, icons);
+  }
+#endif
   const bool swapBeamControls = gpGameState->GameOptions().GetSwapBeamControls();
   if (swapBeamControls != x80_24_swapBeamControls) {
     x80_24_swapBeamControls = swapBeamControls;

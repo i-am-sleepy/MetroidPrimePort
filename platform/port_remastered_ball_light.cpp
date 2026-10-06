@@ -1,3 +1,4 @@
+#include "port_env.h"
 #include "port_remastered_ball_light.h"
 
 #include <algorithm>
@@ -24,8 +25,7 @@ float SrgbToLinear(float c) {
 
 bool Enabled() {
   if (sEnabled < 0) {
-    const char* const env = std::getenv("MP_REMASTERED_BALL_LIGHT");
-    sEnabled = env != nullptr && env[0] == '0' ? 0 : 1;
+    sEnabled = port::EnvFlag("MP_REMASTERED_BALL_LIGHT", true) ? 1 : 0;
   }
   return sEnabled != 0;
 }
@@ -34,8 +34,7 @@ void SetEnabled(bool on) { sEnabled = on ? 1 : 0; }
 
 float Scale() {
   if (sScale < 0.f) {
-    const char* const env = std::getenv("MP_REMASTERED_BALL_LIGHT_SCALE");
-    const float value = env != nullptr ? std::strtof(env, nullptr) : 1.f;
+    const float value = port::EnvFloat("MP_REMASTERED_BALL_LIGHT_SCALE", 1.f);
     sScale = value >= 0.f ? value : 1.f;
   }
   return sScale;

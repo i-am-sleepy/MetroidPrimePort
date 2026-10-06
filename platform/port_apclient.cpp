@@ -1,3 +1,4 @@
+#include "port_env.h"
 #include "port_apclient.h"
 #include "port_log.h"
 #include "port_paths.h"
@@ -47,11 +48,6 @@ namespace {
 using Protocol::Config;
 using Protocol::ItemGrant;
 using Protocol::Session;
-
-bool EnvEnabled(const char* name) {
-  const char* value = std::getenv(name);
-  return value != nullptr && value[0] != '\0' && std::strcmp(value, "0") != 0;
-}
 
 std::string UserDirectory() {
   const std::string& dir = PortPaths::UserFolder();
@@ -553,7 +549,7 @@ void ApplyBuiltinWorld(Runtime& runtime, CStateManager& mgr, CPlayerState& playe
     if (world != nullptr && world->IGetWorldAssetId() == change.mlvl)
       area = world->IGetAreaId(change.mrea);
     if (state == nullptr || area.Value() < 0 ||
-        static_cast<size_t>(area.Value()) >= state->GetAreaLayers().size())
+        static_cast<size_t>(area.Value()) >= static_cast<size_t>(state->GetAreaLayers().size()))
       continue;
     if (change.whileLayer >= 0 && !state->IsLayerActive(area, TLayerId(change.whileLayer)))
       continue;
@@ -561,7 +557,7 @@ void ApplyBuiltinWorld(Runtime& runtime, CStateManager& mgr, CPlayerState& playe
       state->SetLayerActive(area, TLayerId(change.layer), change.active);
   }
   if (layers == nullptr || temple.Value() < 0 ||
-      static_cast<size_t>(temple.Value()) >= layers->GetAreaLayers().size())
+      static_cast<size_t>(temple.Value()) >= static_cast<size_t>(layers->GetAreaLayers().size()))
     return;
   for (int id = CPlayerState::kIT_Truth; id <= CPlayerState::kIT_Newborn; ++id) {
     const bool held = player.GetItemAmount(static_cast<CPlayerState::EItemType>(id)) > 0;
@@ -860,7 +856,7 @@ void WorkerLoop(Runtime& runtime) {
                   else
                     ++queued;
                 }
-                if (EnvEnabled("MP_AP_SEND_ALL"))
+                if (port::EnvFlag("MP_AP_SEND_ALL"))
                   sendAllChecks = runtime.session->AllLocationIds();
                 for (const std::string& warning : runtime.session->GetSlotData().warnings)
                   PortLog::Write("archipelago: seed option %s; the game will not match the "
@@ -1098,7 +1094,7 @@ void StartLocked(Runtime& runtime, bool firstStart) {
   // slot and seed - leaves the recorded checks looking valid, so this is the
   // way out: it drops them before the first connect (or once the seed is known).
   runtime.resetPending = false;
-  if (firstStart && EnvEnabled("MP_AP_RESET_STATE")) {
+  if (firstStart && port::EnvFlag("MP_AP_RESET_STATE")) {
     if (runtime.statePath.empty()) {
       runtime.resetPending = true;
     } else if (state.nextItemIndex != 0 || !state.checkedLocations.empty() ||
@@ -1122,7 +1118,7 @@ void EnsureLoadedImpl(Runtime& runtime) {
   if (runtime.attempted)
     return;
   runtime.attempted = true;
-  if (EnvEnabled("MP_AP_DISABLE")) {
+  if (port::EnvFlag("MP_AP_DISABLE")) {
     runtime.stateLabel = "off";
     return;
   }
@@ -1316,7 +1312,7 @@ bool Connect(const ConnectionDetails& details, std::string& error) {
       error = "not a server address: " + connection.server;
       return false;
     }
-    if (EnvEnabled("MP_AP_DISABLE")) {
+    if (port::EnvFlag("MP_AP_DISABLE")) {
       error = "MP_AP_DISABLE is set";
       return false;
     }

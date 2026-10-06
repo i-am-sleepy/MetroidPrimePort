@@ -1,4 +1,5 @@
 #include "port_remastered_effect.h"
+#include "port_bytes.h"
 
 #include <algorithm>
 #include <cmath>
@@ -13,8 +14,8 @@
 namespace PortRemastered {
 namespace {
 
-uint16_t Le16(const uint8_t* p) { return uint16_t(p[0] | p[1] << 8); }
-uint32_t Le32(const uint8_t* p) { return uint32_t(p[0]) | uint32_t(p[1]) << 8 | uint32_t(p[2]) << 16 | uint32_t(p[3]) << 24; }
+using port::ReadLE16;
+using port::ReadLE32;
 
 constexpr uint32_t kGpsm = EffectFourCC("GPSM");
 constexpr uint32_t kEnd = EffectFourCC("_END");
@@ -343,7 +344,7 @@ public:
         return 0;
       }
     }
-    return Le32(m_data + at);
+    return ReadLE32(m_data + at);
   }
 
   bool StartsWithElement(size_t at) const {
@@ -364,7 +365,7 @@ public:
     if (at + 4 > m_size) {
       return std::nullopt;
     }
-    return Le32(m_data + at);
+    return ReadLE32(m_data + at);
   }
 
   // Where the element starting at `at` can end.
@@ -574,7 +575,7 @@ public:
     if (at + 14 > m_size) {
       return {};
     }
-    return {at + 14 + 16 * size_t(Le16(m_data + at)) + size_t(Le16(m_data + at + 12))};
+    return {at + 14 + 16 * size_t(ReadLE16(m_data + at)) + size_t(ReadLE16(m_data + at + 12))};
   }
 
   // PMTR/SMTR: u8 0, u8 total, then five groups of (u8 count, count x (element
@@ -688,9 +689,9 @@ public:
       return false;
     }
     for (int i = 0; i < 3; ++i) {
-      out.header[i] = Le32(m_data + at + 4 + 4 * i);
+      out.header[i] = ReadLE32(m_data + at + 4 + 4 * i);
     }
-    out.events = Le32(m_data + at + 16);
+    out.events = ReadLE32(m_data + at + 16);
     for (size_t pos : Sequence(at + 20, out.events)) {
       const std::optional<uint32_t> tables = U32(pos);
       if (tables && *tables <= 16 && BuildSpawnTables(pos + 4, *tables, end, out.tables)) {
@@ -710,7 +711,7 @@ public:
         continue;
       }
       EffectSpawnTable::Table table;
-      table.word = Le32(m_data + at);
+      table.word = ReadLE32(m_data + at);
       if (!BuildElement(at + 4, selectorEnd, table.selector)) {
         continue;
       }
@@ -734,7 +735,7 @@ public:
       return false;
     }
     EffectSpawnTable::Frame frame;
-    frame.frame = Le32(m_data + at);
+    frame.frame = ReadLE32(m_data + at);
     out.back().frames.push_back(std::move(frame));
     if (BuildSpawns(at + 8, *spawns, frames, tables, end, out)) {
       return true;
@@ -822,7 +823,7 @@ public:
     if (FourCCAt(at) != kGpsm || at + 25 > m_size) {
       return std::nullopt;
     }
-    return Properties(at + 25, Le32(m_data + at + 21) != 0, top);
+    return Properties(at + 25, ReadLE32(m_data + at + 21) != 0, top);
   }
 
   std::optional<size_t> Child(size_t at) {
@@ -844,7 +845,7 @@ public:
     node.form = FourCCAt(at);
     node.id = id;
     if (node.form == kGpsm) {
-      node.root = Le32(m_data + at + 21) != 0;
+      node.root = ReadLE32(m_data + at + 21) != 0;
       at += 25;
     } else if (Properties(at + 4, false)) {
       at += 4;
@@ -860,7 +861,7 @@ public:
         return at + 5;
       }
       if (fourcc == kEnd) {
-        const uint32_t count = Le32(m_data + at + 5);
+        const uint32_t count = ReadLE32(m_data + at + 5);
         size_t pos = at + 9;
         for (uint32_t i = 0; i < count; ++i) {
           EffectGuid childId;
@@ -956,7 +957,7 @@ private:
       if (trailer == 3) {
         item.word = uint32_t(t[0]) | uint32_t(t[1]) << 8 | uint32_t(t[2]) << 16;
       } else {
-        item.word = Le32(t);
+        item.word = ReadLE32(t);
         EffectValue slot;
         slot.kind = EffectValue::Kind::Word;
         slot.word = uint32_t(t[4]) | uint32_t(t[5]) << 8;
@@ -1033,7 +1034,7 @@ private:
       switch (sig[index]) {
       case 'w':
         value.kind = EffectValue::Kind::Word;
-        value.word = Le32(m_data + at);
+        value.word = ReadLE32(m_data + at);
         break;
       case 'b':
         value.kind = EffectValue::Kind::Byte;

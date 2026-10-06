@@ -186,6 +186,10 @@ void GXSetPBRBakedLightModulation(const f32 rgb[3]);
 // model's bounds along its own y and 1 at the high end (power 1: no fade). `back` and `top` scale the materials'
 // strengths (4 and 2 in Remastered). Null plane turns it off.
 void GXSetPBRBacklight(const f32 plane[4], const f32 backDir[3], f32 back, f32 top);
+// Aurora extension: the constants of a kind 14 PBR material (Remastered's BoundaryShield force
+// field), as the shader reads them. Rows 0-6 are the material's CCH0..CCH6, row 7 is
+// DIFC (x, y, z, w). Stays in effect until changed; null is all zero.
+void GXSetPBRShield(const f32 rows[8][4]);
 // Aurora extension: the following PBR draws light with this in place of the GX light's colour,
 // position and attenuation: a linear colour (no gamma, not clamped), a view-space position,
 // and a falloff from full at r0 to none at r1 (0 none, 1 linear, 2 quadratic, 3 1 - smoothstep,

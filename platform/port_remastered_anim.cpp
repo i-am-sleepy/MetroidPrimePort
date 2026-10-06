@@ -3,6 +3,7 @@
 // doubles with the same float roundings the Python applies, so the output matches it.
 
 #include "port_remastered_anim.h"
+#include "port_bytes.h"
 
 #include <algorithm>
 #include <cmath>
@@ -22,18 +23,9 @@ struct Failure {
 
 [[noreturn]] void Fail(const std::string& message) { throw Failure{message}; }
 
-uint16_t ReadLE16(const uint8_t* p) { return uint16_t(p[0]) | uint16_t(uint16_t(p[1]) << 8); }
-
-uint32_t ReadLE32(const uint8_t* p) {
-  return uint32_t(p[0]) | (uint32_t(p[1]) << 8) | (uint32_t(p[2]) << 16) | (uint32_t(p[3]) << 24);
-}
-
-float ReadLEFloat(const uint8_t* p) {
-  const uint32_t bits = ReadLE32(p);
-  float value = 0.0f;
-  std::memcpy(&value, &bits, sizeof(value));
-  return value;
-}
+using port::ReadLE16;
+using port::ReadLE32;
+using port::ReadLEFloat;
 
 // The Python rounds to single precision at a few points; this is that rounding.
 double F32(double x) { return double(float(x)); }

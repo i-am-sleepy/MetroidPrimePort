@@ -169,7 +169,7 @@ under GNOME unless the port's own X11 preference applies — see
 
    The one thing still unexplained is **why the in-game screen finds a corrupt
    file at all** on a card that was supposed to be empty. That is not a shipping
-   blocker, but it is not understood, and `PORT_NOTES.md` records it as open.
+   blocker, but it is not understood and is still open.
 2. **No answer for the decompiled game source.** The port's own work is MIT
    (`LICENSE`, scoped) and `NOTICE` says so, but what may be done with a working
    copy of decompiled game code is a question for the copyright holder, and no

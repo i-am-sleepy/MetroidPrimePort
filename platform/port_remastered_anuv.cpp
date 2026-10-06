@@ -1,4 +1,5 @@
 #include "port_remastered_anuv.h"
+#include "port_bytes.h"
 
 #include <algorithm>
 #include <cmath>
@@ -38,9 +39,7 @@ const char* AnuvSkipName(AnuvSkip skip) {
 
 namespace {
 
-uint32_t ReadU32(const uint8_t* p) {
-  return uint32_t(p[0]) | (uint32_t(p[1]) << 8) | (uint32_t(p[2]) << 16) | (uint32_t(p[3]) << 24);
-}
+using port::ReadLE32;
 
 struct Reader {
   const uint8_t* data;
@@ -53,7 +52,7 @@ struct Reader {
       ok = false;
       return 0;
     }
-    const uint32_t v = ReadU32(data + pos);
+    const uint32_t v = ReadLE32(data + pos);
     pos += 4;
     return v;
   }
@@ -116,7 +115,7 @@ struct Program {
   std::vector<uint32_t> ids;
 
   size_t Words() const { return blob.size() / 4; }
-  uint32_t W(size_t i) const { return ReadU32(blob.data() + 4 * i); }
+  uint32_t W(size_t i) const { return ReadLE32(blob.data() + 4 * i); }
   float F(size_t i) const {
     const uint32_t u = W(i);
     float f;
@@ -328,7 +327,7 @@ bool ParseAnuv(const uint8_t* data, size_t size, Anuv& out, std::string& error) 
     }
     std::vector<uint32_t> words(bytes / 4);
     for (size_t k = 0; k < words.size(); ++k) {
-      words[k] = ReadU32(h + 4 * k);
+      words[k] = ReadLE32(h + 4 * k);
     }
     prog.handles.push_back(std::move(words));
   }

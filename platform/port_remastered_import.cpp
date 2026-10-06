@@ -1,3 +1,4 @@
+#include "port_env.h"
 #include "port_remastered_import.h"
 
 #include <algorithm>
@@ -80,6 +81,7 @@ constexpr uint32_t kSTRG = 0x53545247;
 constexpr uint32_t kMSBT = 0x4D534254;
 constexpr uint32_t kFONT = 0x464F4E54;
 constexpr uint32_t kGUIF = 0x47554946;
+constexpr uint32_t kLDTA = 0x4C445441;
 constexpr uint32_t kCMAP = 0x434D4150;
 constexpr uint32_t kMAPA = 0x4D415041;
 constexpr uint32_t kMAPW = 0x4D415057;
@@ -225,20 +227,17 @@ void Finish(bool ok, const std::string& message) {
 
 // MP_REMASTERED_TEXT=0 leaves the disc's wording alone.
 bool WantsText() {
-  const char* env = std::getenv("MP_REMASTERED_TEXT");
-  return env == nullptr || std::strcmp(env, "0") != 0;
+  return port::EnvFlag("MP_REMASTERED_TEXT", true);
 }
 
 // MP_REMASTERED_HUD=0 leaves the disc's HUD alone.
 bool WantsHud() {
-  const char* env = std::getenv("MP_REMASTERED_HUD");
-  return env == nullptr || std::strcmp(env, "0") != 0;
+  return port::EnvFlag("MP_REMASTERED_HUD", true);
 }
 
 // MP_REMASTERED_GALLERY=0 leaves the Extras gallery out.
 bool WantsGallery() {
-  const char* env = std::getenv("MP_REMASTERED_GALLERY");
-  return env == nullptr || std::strcmp(env, "0") != 0;
+  return port::EnvFlag("MP_REMASTERED_GALLERY", true);
 }
 
 // MP_REMASTERED_MOVIES=0 leaves the disc's movies alone; a size and rate
@@ -263,8 +262,7 @@ bool WantsMovies(MovieFormat& format) {
 std::atomic<bool> sReuse{true};
 
 bool WantsReuse() {
-  const char* env = std::getenv("MP_REMASTERED_REUSE");
-  return sReuse.load() && (env == nullptr || std::strcmp(env, "0") != 0);
+  return sReuse.load() && port::EnvFlag("MP_REMASTERED_REUSE", true);
 }
 
 // What a stage of an import made, written to kManifestName in the mod: a re-import whose stage
@@ -726,6 +724,10 @@ public:
           for (const std::string& name : assets[a].names) {
             m_maps.emplace(FrameKey(name), Where{m_paks.size(), a});
           }
+        } else if (type == kLDTA) {
+          for (const std::string& name : assets[a].names) {
+            m_tweaks.emplace(FrameKey(name), Where{m_paks.size(), a});
+          }
         }
       }
       m_paks.push_back(std::move(pak));
@@ -762,6 +764,17 @@ public:
   bool ReadFrame(const std::string& name, std::vector<uint8_t>& out, std::string& error) const {
     const auto found = m_frames.find(FrameKey(name));
     if (found == m_frames.end()) {
+      error = "not in the image";
+      return false;
+    }
+    const Pak& pak = *m_paks[found->second.pak];
+    return pak.ReadAsset(pak.Assets()[found->second.asset], out, error);
+  }
+
+  // A tweak file by its asset name ("TweakGuiColorsMP1"), as ReadFrame finds a frame.
+  bool ReadTweak(const std::string& name, std::vector<uint8_t>& out, std::string& error) const {
+    const auto found = m_tweaks.find(FrameKey(name));
+    if (found == m_tweaks.end()) {
       error = "not in the image";
       return false;
     }
@@ -945,6 +958,7 @@ private:
   Index m_effects;
   Index m_materials;
   std::unordered_map<std::string, Where> m_frames;  // GUIF, by FrameKey
+  std::unordered_map<std::string, Where> m_tweaks;  // LDTA, by FrameKey
   std::unordered_map<std::string, Where> m_textureNames;  // the named TXTR, by FrameKey
   std::unordered_map<std::string, Where> m_modelNames;    // the named CMDL, by FrameKey
   std::unordered_map<std::string, Where> m_maps;  // CMAP, by FrameKey
@@ -1535,6 +1549,13 @@ void Run(std::string nspPath, std::string keysPath, int threads, fs::path stagin
     };
     io.retail = [&](uint32_t type, uint32_t id, std::vector<uint8_t>& out) { return retail.Read(type, id, out); };
     io.retailId = [&](uint32_t id) { return retail.HasId(id); };
+    // MP_REMASTERED_JOINTS=1: the models' skin log (joint to bone) on stderr.
+    if (port::EnvFlag("MP_REMASTERED_JOINTS")) {
+      io.log = [&](const std::string& line) {
+        std::lock_guard<std::mutex> lock(reportMutex);
+        std::fprintf(stderr, "%s\n", line.c_str());
+      };
+    }
     io.texture = [&](const ModelUuid& id, Image& out, std::string& textureError) {
       return textures.Get(id, out, textureError, [&](Image& decoded, std::string& decodeError) {
         std::vector<uint8_t> raw;
@@ -2645,6 +2666,18 @@ void Run(std::string nspPath, std::string keysPath, int threads, fs::path stagin
     fs::create_directories(hudFolder, ec);
     HudConverter converter(makeIO(0, hudFolder));
     HudCounts counts;
+    {
+      // Remastered colours each beam's icon in the beam menu.
+      std::vector<uint8_t> tweak;
+      std::map<std::string, HudConverter::Tint> tints;
+      std::string tweakError;
+      if (remastered.ReadTweak("TweakGuiColorsMP1", tweak, tweakError) &&
+          HudBeamIconTints(tweak.data(), tweak.size(), tints, tweakError)) {
+        converter.SetTints(std::move(tints));
+      } else {
+        AddLine("TweakGuiColorsMP1: " + tweakError + "; the beam icons are left white");
+      }
+    }
     for (const HudFrame& frame : HudFrames()) {
       std::vector<uint8_t> raw;
       std::vector<uint8_t> rawModel;

@@ -3,7 +3,9 @@
 // A port of build/mpr/roomtools/envwrite.py (with roomlib.py, gcres.py and
 // ltpb.cpp). Everything read here is untrusted file content: every read is
 // bounds checked and a malformed file fails its room, never the process.
+#include "port_env.h"
 #include "port_remastered_room.h"
+#include "port_bytes.h"
 
 #include <algorithm>
 #include <array>
@@ -224,38 +226,22 @@ constexpr size_t kMaxGridPoints = size_t(1) << 20;
 // Remastered room coordinates -> GameCube area coordinates: (x, y, z) -> (-x, z, y).
 constexpr double kR2G[3][3] = {{-1, 0, 0}, {0, 0, 1}, {0, 1, 0}};
 
-uint16_t Le16(const uint8_t* p) { return uint16_t(p[0] | (p[1] << 8)); }
-uint32_t Le32(const uint8_t* p) {
-  return uint32_t(p[0]) | (uint32_t(p[1]) << 8) | (uint32_t(p[2]) << 16) | (uint32_t(p[3]) << 24);
-}
-uint64_t Le64(const uint8_t* p) { return uint64_t(Le32(p)) | (uint64_t(Le32(p + 4)) << 32); }
-uint32_t Be32(const uint8_t* p) {
-  return (uint32_t(p[0]) << 24) | (uint32_t(p[1]) << 16) | (uint32_t(p[2]) << 8) | uint32_t(p[3]);
-}
-float LeFloat(const uint8_t* p) {
-  const uint32_t bits = Le32(p);
-  float v;
-  std::memcpy(&v, &bits, 4);
-  return v;
-}
+using port::AppendBE32;
+using port::AppendLE32;
+using port::AppendLEFloat;
+using port::ReadBE32;
+using port::ReadLE16;
+using port::ReadLE32;
+using port::ReadLE64;
+using port::ReadLEFloat;
 float BeFloat(const uint8_t* p) {
-  const uint32_t bits = Be32(p);
+  const uint32_t bits = ReadBE32(p);
   float v;
   std::memcpy(&v, &bits, 4);
   return v;
 }
 
-void PutLe32(std::vector<uint8_t>& out, uint32_t v) {
-  for (int i = 0; i < 4; ++i) {
-    out.push_back(uint8_t(v >> (8 * i)));
-  }
-}
-void PutFloat(std::vector<uint8_t>& out, double v) {
-  const float f = float(v);
-  uint32_t bits;
-  std::memcpy(&bits, &f, 4);
-  PutLe32(out, bits);
-}
+
 
 // float32 -> float16, round to nearest even (numpy's astype(float16)).
 uint16_t FloatToHalf(float f) {
@@ -406,9 +392,9 @@ public:
     }
     const uint8_t* p = Bytes(raw) + 2;
     for (size_t i = 0; i < 3; ++i) {
-      pos[i] = LeFloat(p + 4 * i);
-      rot[i] = LeFloat(p + 12 + 4 * i);
-      scale[i] = LeFloat(p + 24 + 4 * i);
+      pos[i] = ReadLEFloat(p + 4 * i);
+      rot[i] = ReadLEFloat(p + 12 + 4 * i);
+      scale[i] = ReadLEFloat(p + 24 + 4 * i);
     }
     return true;
   }
@@ -469,12 +455,12 @@ bool Room::Chunks(size_t o, size_t end, std::vector<Chunk>& out, std::string& er
       error = "truncated chunk header";
       return false;
     }
-    const uint64_t size = Le64(&d[o + 4]);
+    const uint64_t size = ReadLE64(&d[o + 4]);
     if (size > d.size() - o - header) {
       error = "a chunk runs past the end of the file";
       return false;
     }
-    out.push_back({form ? Be32(&d[o + 20]) : Be32(&d[o]), o + header, size_t(size)});
+    out.push_back({form ? ReadBE32(&d[o + 20]) : ReadBE32(&d[o]), o + header, size_t(size)});
     o += header + size_t(size);
   }
   return true;
@@ -510,7 +496,7 @@ bool Room::Parse(const std::vector<uint8_t>& data, std::string& error) {
     return false;
   }
   const size_t rs = 32;
-  const uint64_t rsz = Le64(&d[4]);
+  const uint64_t rsz = ReadLE64(&d[4]);
   if (rsz > d.size() - rs) {
     error = "the form runs past the end of the file";
     return false;
@@ -525,7 +511,7 @@ bool Room::Parse(const std::vector<uint8_t>& data, std::string& error) {
   }
   // STRP: u32 16, u32 1, u32 the pool's size, then the pool (NUL-separated names).
   if (!strp.empty() && strp[0].size >= 12) {
-    const size_t pool = Le32(&d[strp[0].start + 8]);
+    const size_t pool = ReadLE32(&d[strp[0].start + 8]);
     m_strings = {strp[0].start + 12, std::min(pool, strp[0].size - 12)};
   }
   std::map<Id16, size_t>& byGuid = m_byGuid;
@@ -544,7 +530,7 @@ bool Room::Parse(const std::vector<uint8_t>& data, std::string& error) {
     for (const Span& cs : comps) {
       // The records are 12 bytes; a short tail is not one.
       for (size_t o = cs.start; o + 12 <= cs.start + cs.size; o += 12) {
-        const uint32_t type = Le32(&d[o]), pi = Le32(&d[o + 4]), ii = Le32(&d[o + 8]);
+        const uint32_t type = ReadLE32(&d[o]), pi = ReadLE32(&d[o + 4]), ii = ReadLE32(&d[o + 8]);
         if (pi >= sden.size() || ii >= idta.size()) {
           error = "a component points outside the data tables";
           return false;
@@ -613,14 +599,14 @@ bool PropList(const uint8_t* b, size_t len, std::vector<Prop>* out) {
   if (len < 2) {
     return false;
   }
-  const size_t n = Le16(b);
+  const size_t n = ReadLE16(b);
   size_t o = 2;
   for (size_t i = 0; i < n; ++i) {
     if (o + 6 > len) {
       return false;
     }
-    const uint32_t id = Le32(b + o);
-    const size_t size = Le16(b + o + 4);
+    const uint32_t id = ReadLE32(b + o);
+    const size_t size = ReadLE16(b + o + 4);
     o += 6;
     if (o + size > len) {
       return false;
@@ -706,7 +692,7 @@ bool ReadMlvl(const std::vector<uint8_t>& d, std::vector<std::pair<uint32_t, Mat
     return false;
   }
   o += 20;
-  uint32_t n = Be32(&d[o]);
+  uint32_t n = ReadBE32(&d[o]);
   if (n > d.size() / 11 || !need(4 + size_t(n) * 11)) {
     return false;
   }
@@ -714,7 +700,7 @@ bool ReadMlvl(const std::vector<uint8_t>& d, std::vector<std::pair<uint32_t, Mat
   if (!need(8)) {
     return false;
   }
-  n = Be32(&d[o]);
+  n = ReadBE32(&d[o]);
   o += 8;
   if (n > 4096) {
     return false;
@@ -724,7 +710,7 @@ bool ReadMlvl(const std::vector<uint8_t>& d, std::vector<std::pair<uint32_t, Mat
     if (!need(4)) {
       return false;
     }
-    const uint64_t c = Be32(&d[o]);
+    const uint64_t c = ReadBE32(&d[o]);
     if (c * unit > d.size()) {
       return false;
     }
@@ -743,7 +729,7 @@ bool ReadMlvl(const std::vector<uint8_t>& d, std::vector<std::pair<uint32_t, Mat
     for (size_t k = 0; k < 12; ++k) {
       xf[k / 4][k % 4] = BeFloat(&d[o + 4 + 4 * k]);
     }
-    out.push_back({Be32(&d[o + 76]), xf});
+    out.push_back({ReadBE32(&d[o + 76]), xf});
     o += 84;
     if (!skip(2)) {
       return false;
@@ -752,7 +738,7 @@ bool ReadMlvl(const std::vector<uint8_t>& d, std::vector<std::pair<uint32_t, Mat
     if (!skip(8) || !skip(4) || !need(4)) {
       return false;
     }
-    const uint32_t c = Be32(&d[o]);
+    const uint32_t c = ReadBE32(&d[o]);
     o += 4;
     if (c > d.size()) {
       return false;
@@ -771,13 +757,13 @@ bool ReadScly(const std::vector<uint8_t>& m, std::vector<ScriptObject>& objects)
   if (m.size() < 100) {
     return false;
   }
-  const uint32_t sections = Be32(&m[60]), scly = Be32(&m[68]);
+  const uint32_t sections = ReadBE32(&m[60]), scly = ReadBE32(&m[68]);
   if (sections > m.size() / 4 || 96 + size_t(sections) * 4 > m.size() || scly > sections) {
     return false;
   }
   size_t o = (96 + 4 * size_t(sections) + 31) & ~size_t(31);
   for (uint32_t i = 0; i < scly; ++i) {
-    o += Be32(&m[96 + 4 * size_t(i)]);
+    o += ReadBE32(&m[96 + 4 * size_t(i)]);
     if (o > m.size()) {
       return false;
     }
@@ -785,7 +771,7 @@ bool ReadScly(const std::vector<uint8_t>& m, std::vector<ScriptObject>& objects)
   if (o + 12 > m.size() || std::memcmp(&m[o], "SCLY", 4) != 0) {
     return false;
   }
-  const uint32_t layers = Be32(&m[o + 8]);
+  const uint32_t layers = ReadBE32(&m[o + 8]);
   if (layers > m.size() / 4 || o + 12 + 4 * size_t(layers) > m.size()) {
     return false;
   }
@@ -796,14 +782,14 @@ bool ReadScly(const std::vector<uint8_t>& m, std::vector<ScriptObject>& objects)
     if (p + 4 > m.size()) {
       return false;
     }
-    const uint32_t count = Be32(&m[p]);
+    const uint32_t count = ReadBE32(&m[p]);
     p += 4;
     for (uint32_t i = 0; i < count; ++i) {
       if (p + 5 > m.size()) {
         return false;
       }
       const uint8_t type = m[p];
-      const size_t size = Be32(&m[p + 1]);
+      const size_t size = ReadBE32(&m[p + 1]);
       const size_t objectEnd = p + 5 + size;
       if (objectEnd > m.size()) {
         return false;
@@ -813,21 +799,21 @@ bool ReadScly(const std::vector<uint8_t>& m, std::vector<ScriptObject>& objects)
         return false;
       }
       ScriptObject object;
-      object.id = Be32(&m[q]);
+      object.id = ReadBE32(&m[q]);
       object.type = type;
       object.layer = int(l);
-      const uint64_t children = Be32(&m[q + 4]);
+      const uint64_t children = ReadBE32(&m[q + 4]);
       if (children > (objectEnd - q - 8) / 12) {
         return false;
       }
       for (uint64_t k = 0; k < children; ++k) {
-        object.targets.push_back(Be32(&m[q + 8 + 12 * size_t(k) + 8]));
+        object.targets.push_back(ReadBE32(&m[q + 8 + 12 * size_t(k) + 8]));
       }
       q += 8 + size_t(12 * children) + 4;
       if (q > objectEnd) {
         return false;
       }
-      object.propCount = Be32(&m[q - 4]);
+      object.propCount = ReadBE32(&m[q - 4]);
       const uint8_t* zero = static_cast<const uint8_t*>(std::memchr(&m[q], 0, objectEnd - q));
       if (zero == nullptr) {
         return false;
@@ -843,7 +829,7 @@ bool ReadScly(const std::vector<uint8_t>& m, std::vector<ScriptObject>& objects)
       objects.push_back(std::move(object));
       p = objectEnd;
     }
-    o += Be32(&m[sizesAt + 4 * size_t(l)]);
+    o += ReadBE32(&m[sizesAt + 4 * size_t(l)]);
   }
   return true;
 }
@@ -1073,7 +1059,7 @@ bool ReadComponentConnections(const Room& room, size_t i, std::vector<Connection
     if (!has(8)) {
       return false;
     }
-    const uint32_t x = Le32(b + o), y = Le32(b + o + 4);
+    const uint32_t x = ReadLE32(b + o), y = ReadLE32(b + o + 4);
     o += 8;
     if (x == 0xffffffff) {
       if (!has(y)) {
@@ -1084,7 +1070,7 @@ bool ReadComponentConnections(const Room& room, size_t i, std::vector<Connection
     if (!has(2)) {
       return false;
     }
-    const size_t count = Le16(b + o);
+    const size_t count = ReadLE16(b + o);
     o += 2;
     bool ok = true;
     // Two optional strings, then a fixed tail.
@@ -1092,19 +1078,19 @@ bool ReadComponentConnections(const Room& room, size_t i, std::vector<Connection
       if (!has(4)) {
         return false;
       }
-      const uint32_t present = Le32(b + o);
+      const uint32_t present = ReadLE32(b + o);
       o += 4;
       if (present == 0) {
         return true;
       }
-      if (!has(2) || (o += 2, !has(Le16(b + o - 2)))) {
+      if (!has(2) || (o += 2, !has(ReadLE16(b + o - 2)))) {
         return false;
       }
-      o += Le16(b + o - 2);
+      o += ReadLE16(b + o - 2);
       if (!has(4)) {
         return false;
       }
-      const uint32_t size = Le32(b + o);
+      const uint32_t size = ReadLE32(b + o);
       o += 4;
       if (!has(size)) {
         return false;
@@ -1117,7 +1103,7 @@ bool ReadComponentConnections(const Room& room, size_t i, std::vector<Connection
         ok = false;
         break;
       }
-      Connection c{i, Le32(b + o), Le32(b + o + 4), {}};
+      Connection c{i, ReadLE32(b + o), ReadLE32(b + o + 4), {}};
       std::memcpy(c.target.data(), b + o + 8, 16);
       o += 26;
       ok = block() && block() && has(19);
@@ -1157,7 +1143,7 @@ std::vector<int> ReadEntityLinks(const Room& room, size_t i) {
   if (o > n || n - o < 2) {
     return out;
   }
-  const size_t count = Le16(b + o);
+  const size_t count = ReadLE16(b + o);
   o += 2;
   if ((n - o) / 42 < count) {
     return out;
@@ -1406,7 +1392,7 @@ SceneryScripts MatchScripts(const Room& room, const Area& area) {
       const auto f = room.Flat(c);
       const auto flags = f.find(kPropTriggerFlags);
       if (flags != f.end() && flags->second.size == 4 &&
-          (Le32(room.Bytes(flags->second)) & kTriggerDetectCamera) != 0) {
+          (ReadLE32(room.Bytes(flags->second)) & kTriggerDetectCamera) != 0) {
         kind = PortRoomGeo::kCameraVolume;
       }
     } else if (c.type == kCounter) {
@@ -1603,7 +1589,7 @@ SceneryScripts MatchScripts(const Room& room, const Area& area) {
           // sends them, so only a direct one counts.
           const bool follows = depth == 0 && type == kRetailDamageableTrigger && state == kStateMaxReached &&
                                first == kActionActivate;
-          const uint8_t linkAct = follows ? PortRoomGeo::kFollow : act(first);
+          const uint8_t linkAct = follows ? static_cast<uint8_t>(PortRoomGeo::kFollow) : act(first);
           if (linkAct != 0 && state < 256) {
             links.push_back({objects[size_t(match[size_t(s)])].id, uint8_t(state), linkAct, delay});
           }
@@ -1615,7 +1601,7 @@ SceneryScripts MatchScripts(const Room& room, const Area& area) {
             const auto f = room.Flat(sender);
             const auto prop = f.find(kPropTimerDelay);
             if (prop != f.end() && prop->second.size == 4) {
-              wait = LeFloat(room.Bytes(prop->second));
+              wait = ReadLEFloat(room.Bytes(prop->second));
               wait = std::isfinite(wait) ? std::clamp(wait, 0.f, 600.f) : 0.f;
             }
           }
@@ -1673,7 +1659,7 @@ SceneryScripts MatchScripts(const Room& room, const Area& area) {
       const auto f = room.Flat(c);
       const auto max = f.find(kPropCounterMax);
       if (max != f.end() && max->second.size == 4) {
-        node.max = Le32(room.Bytes(max->second));
+        node.max = ReadLE32(room.Bytes(max->second));
       }
     }
     Vec3 pos, rot, scale;
@@ -1759,7 +1745,8 @@ SceneryScripts MatchScripts(const Room& room, const Area& area) {
       if (sender.type == kTemplateManager || sender.type == kDebugOptions || (group && !fromScript && !keyframe)) {
         continue;
       }
-      const uint8_t action = keyframe ? PortRoomGeo::kGroupNextClip : scriptAction(kind, c->action);
+      const uint8_t action =
+          keyframe ? static_cast<uint8_t>(PortRoomGeo::kGroupNextClip) : scriptAction(kind, c->action);
       int event = -1;
       if (fromScript) {
         event = nodeEvent(scriptObject.at(sender.entity).first, c->event);
@@ -1954,6 +1941,10 @@ private:
   const std::vector<RoomPak>& m_others;
   const RoomIO& m_io;
   std::vector<Area> m_areas;
+  // Per LTPB block (layer, x, y, z), the world's room whose copy has the most lit points.
+  using GridKey = std::array<int32_t, 4>;
+  mutable std::map<GridKey, const RoomPak*> m_gridOwners;
+  mutable bool m_gridOwnersReady = false;
 };
 
 double Spread(const std::vector<Vec3>& a, const std::vector<Vec3>& b) {
@@ -2119,7 +2110,7 @@ void Writer::Tonemap(const RoomData& r, float out[5]) const {
     for (int i = 0; i < 5; ++i) {
       const auto it = f.find(kPropTonemap[i]);
       if (it != f.end() && it->second.size >= 4) {
-        out[i] = LeFloat(r.room.Bytes(it->second));
+        out[i] = ReadLEFloat(r.room.Bytes(it->second));
       }
     }
     break;
@@ -2141,7 +2132,7 @@ void Writer::Exposure(const RoomData& r, float out[5]) const {
     const auto f = r.room.Flat(*c);
     const auto value = [&](uint32_t prop, float fallback) {
       const auto it = f.find(prop);
-      return it != f.end() && it->second.size >= 4 ? LeFloat(r.room.Bytes(it->second)) : fallback;
+      return it != f.end() && it->second.size >= 4 ? ReadLEFloat(r.room.Bytes(it->second)) : fallback;
     };
     const float range[2] = {value(kPropHintMin, -24.f), value(kPropHintMax, 24.f)};
     const float bias = value(kPropHintBias, 0.f);
@@ -2172,16 +2163,16 @@ void Writer::ReadBloom(const RoomData& r, BloomData& out) const {
     const auto f = r.room.Flat(*c);
     auto it = f.find(kPropBloomThreshold);
     if (it != f.end() && it->second.size >= 4) {
-      out.threshold = LeFloat(r.room.Bytes(it->second));
+      out.threshold = ReadLEFloat(r.room.Bytes(it->second));
     }
     it = f.find(kPropBloomTints);
     if (it != f.end() && it->second.size >= 4) {
       const uint8_t* const p = r.room.Bytes(it->second);
-      const uint32_t count = Le32(p);
+      const uint32_t count = ReadLE32(p);
       if (count <= 16 && it->second.size >= 4 + count * 16) {
         out.tints.assign(count * 4, 0.f);
         for (uint32_t i = 0; i < count * 4; ++i) {
-          out.tints[i] = LeFloat(p + 4 + i * 4);
+          out.tints[i] = ReadLEFloat(p + 4 + i * 4);
         }
       }
     }
@@ -2260,13 +2251,13 @@ void Writer::ReadGrades(const RoomData& r, const Area* area, std::vector<GradeDa
     // Defaults as CGameHintBase's.
     auto fade = [&](uint32_t prop) {
       const auto it = hf.find(prop);
-      return it != hf.end() && it->second.size >= 4 ? LeFloat(r.room.Bytes(it->second)) : 2.f;
+      return it != hf.end() && it->second.size >= 4 ? ReadLEFloat(r.room.Bytes(it->second)) : 2.f;
     };
     g.fadeIn = fade(kPropHintFadeIn);
     g.fadeOut = fade(kPropHintFadeOut);
     Span priority;
     if (r.room.Nested(*h->second, {kPropHintPriority[0], kPropHintPriority[1]}, priority) && priority.size >= 4) {
-      g.priority = int32_t(Le32(r.room.Bytes(priority)));
+      g.priority = int32_t(ReadLE32(r.room.Bytes(priority)));
     }
     // A global hint is requested while its entity is active; a local one once told to.
     g.on = isGlobal && r.room.Active(*h->second);
@@ -2320,7 +2311,7 @@ void Writer::ReadBacklights(const RoomData& r, const Area* area, std::vector<Bac
     BacklightData b;
     auto value = [&](uint32_t prop, float fallback) {
       const auto it = f.find(prop);
-      const float v = it != f.end() && it->second.size >= 4 ? LeFloat(r.room.Bytes(it->second)) : fallback;
+      const float v = it != f.end() && it->second.size >= 4 ? ReadLEFloat(r.room.Bytes(it->second)) : fallback;
       return std::isfinite(v) ? v : fallback;
     };
     b.top = value(kPropBacklightTop, 1.f);
@@ -2329,7 +2320,7 @@ void Writer::ReadBacklights(const RoomData& r, const Area* area, std::vector<Bac
     b.fadeOut = value(kPropBacklightFadeOut, 1.f);
     Span priority;
     if (r.room.Nested(*c, {kPropBacklightPriority[0], kPropBacklightPriority[1]}, priority) && priority.size >= 4) {
-      b.priority = int32_t(Le32(r.room.Bytes(priority)));
+      b.priority = int32_t(ReadLE32(r.room.Bytes(priority)));
     }
     b.on = isGlobal && r.room.Active(*c);
     b.links = std::move(links);
@@ -2382,14 +2373,14 @@ void Writer::ReadFogs(const RoomData& r, const Area* area, std::vector<FogData>&
     const auto ff = r.room.Flat(fog);
     auto value = [&](uint32_t prop, float fallback) {
       const auto it = ff.find(prop);
-      const float v = it != ff.end() && it->second.size >= 4 ? LeFloat(r.room.Bytes(it->second)) : fallback;
+      const float v = it != ff.end() && it->second.size >= 4 ? ReadLEFloat(r.room.Bytes(it->second)) : fallback;
       return std::isfinite(v) ? v : fallback;
     };
     auto vec4 = [&](uint32_t prop, float* dst) {
       const auto it = ff.find(prop);
       if (it != ff.end() && it->second.size >= 16) {
         for (int i = 0; i < 4; ++i) {
-          const float v = LeFloat(r.room.Bytes(it->second) + 4 * i);
+          const float v = ReadLEFloat(r.room.Bytes(it->second) + 4 * i);
           dst[i] = std::isfinite(v) ? v : dst[i];
         }
       }
@@ -2412,7 +2403,7 @@ void Writer::ReadFogs(const RoomData& r, const Area* area, std::vector<FogData>&
     auto atten = [&](uint32_t id, float& dst) {
       Span sp;
       if (r.room.Nested(fog, {kPropFogAtten, id}, sp) && sp.size >= 4) {
-        const float v = LeFloat(r.room.Bytes(sp));
+        const float v = ReadLEFloat(r.room.Bytes(sp));
         dst = std::isfinite(v) ? v : dst;
       }
     };
@@ -2444,7 +2435,7 @@ void Writer::ReadFogs(const RoomData& r, const Area* area, std::vector<FogData>&
       g.useScriptWind = r.room.Bytes(ws)[0] != 0;
     }
     if (r.room.Nested(fog, {kPropFogWind, kPropFogWindVec}, ws) && ws.size >= 12) {
-      const Vec3 v = MulR2G({LeFloat(r.room.Bytes(ws)), LeFloat(r.room.Bytes(ws) + 4), LeFloat(r.room.Bytes(ws) + 8)});
+      const Vec3 v = MulR2G({ReadLEFloat(r.room.Bytes(ws)), ReadLEFloat(r.room.Bytes(ws) + 4), ReadLEFloat(r.room.Bytes(ws) + 8)});
       for (size_t i = 0; i < 3; ++i) {
         g.wind[i] = std::isfinite(v[i]) ? float(v[i]) : 0.f;
       }
@@ -2485,7 +2476,7 @@ void Writer::ReadFogs(const RoomData& r, const Area* area, std::vector<FogData>&
     g.fadeOut = fade(kPropFogFadeOut);
     Span priority;
     if (r.room.Nested(*h, {kPropFogPriority[0], kPropFogPriority[1]}, priority) && priority.size >= 4) {
-      g.priority = int32_t(Le32(r.room.Bytes(priority)));
+      g.priority = int32_t(ReadLE32(r.room.Bytes(priority)));
     }
     g.on = isGlobal && r.room.Active(*h);
     g.links = std::move(links);
@@ -2531,18 +2522,18 @@ void Writer::ReadFogRegions(const RoomData& r, const SceneryScripts& scripts, co
     const auto f = r.room.Flat(*c);
     auto value = [&](uint32_t prop, float fallback) {
       const auto it = f.find(prop);
-      return it != f.end() && it->second.size >= 4 ? LeFloat(r.room.Bytes(it->second)) : fallback;
+      return it != f.end() && it->second.size >= 4 ? ReadLEFloat(r.room.Bytes(it->second)) : fallback;
     };
     auto word = [&](uint32_t prop) {
       const auto it = f.find(prop);
-      return it != f.end() && it->second.size >= 4 ? Le32(r.room.Bytes(it->second)) : 0u;
+      return it != f.end() && it->second.size >= 4 ? ReadLE32(r.room.Bytes(it->second)) : 0u;
     };
     float color[4] = {1, 1, 1, 1};
     {
       const auto it = f.find(kPropRegionColor);
       if (it != f.end() && it->second.size >= 16) {
         for (int i = 0; i < 4; ++i) {
-          color[i] = LeFloat(r.room.Bytes(it->second) + 4 * i);
+          color[i] = ReadLEFloat(r.room.Bytes(it->second) + 4 * i);
         }
       }
     }
@@ -2675,7 +2666,7 @@ void Writer::ReadFogRegions(const RoomData& r, const SceneryScripts& scripts, co
     const auto f = r.room.Flat(*c);
     auto value = [&](uint32_t prop, float fallback) {
       const auto it = f.find(prop);
-      const float v = it != f.end() && it->second.size >= 4 ? LeFloat(r.room.Bytes(it->second)) : fallback;
+      const float v = it != f.end() && it->second.size >= 4 ? ReadLEFloat(r.room.Bytes(it->second)) : fallback;
       return std::isfinite(v) ? v : fallback;
     };
     auto flag = [&](std::initializer_list<uint32_t> path) {
@@ -2702,7 +2693,7 @@ void Writer::ReadFogRegions(const RoomData& r, const SceneryScripts& scripts, co
       const auto it = f.find(kPropTransitionColor);
       if (it != f.end() && it->second.size >= 16) {
         for (int i = 0; i < 4; ++i) {
-          const float v = LeFloat(r.room.Bytes(it->second) + 4 * i);
+          const float v = ReadLEFloat(r.room.Bytes(it->second) + 4 * i);
           t.color[i] = std::isfinite(v) ? v : t.color[i];
         }
       }
@@ -2742,17 +2733,68 @@ struct GridTexture {
   std::vector<float> rgba;
 };
 
+// The textures of an LTPB: the TXTR forms inside it, each preceded by a 77 byte record.
+// Only those `want` accepts (it sees the record fields, not the data) are decoded.
+bool ReadGridTextures(const std::vector<uint8_t>& d, const std::function<bool(const GridTexture&)>& want,
+                      std::vector<GridTexture>& textures, std::string& note) {
+  std::string error;
+  for (size_t o = 77; o + 32 < d.size(); ++o) {
+    if (std::memcmp(&d[o], "RFRM", 4) != 0 || std::memcmp(&d[o + 20], "TXTR", 4) != 0) {
+      continue;
+    }
+    const uint8_t* g = &d[o - 77];
+    if (o + 76 > d.size()) {
+      note = "grid not decoded";
+      return false;
+    }
+    const uint32_t decomp = ReadLE32(g + 20), bufOff = ReadLE32(g + 45), bufSize = ReadLE32(g + 49);
+    GridTexture t;
+    t.bx = int32_t(ReadLE32(g + 61));
+    t.by = int32_t(ReadLE32(g + 65));
+    t.bz = int32_t(ReadLE32(g + 69));
+    t.index = ReadLE32(g + 73);
+    const uint8_t* h = &d[o + 56];
+    t.kind = ReadLE32(h);
+    t.format = ReadLE32(h + 4);
+    t.w = ReadLE32(h + 8);
+    t.h = ReadLE32(h + 12);
+    t.depth = ReadLE32(h + 16);
+    if (bufOff > d.size() - o || bufSize > d.size() - o - bufOff) {
+      note = "grid not decoded";
+      return false;
+    }
+    if (t.index > 5 || t.h != 64 || t.depth != 16 || (t.w != 64 && t.w != 128)) {
+      note = "grid texture " + std::to_string(t.w) + "x" + std::to_string(t.h) + "x" + std::to_string(t.depth) +
+             " index " + std::to_string(t.index);
+      return false;
+    }
+    if (!want(t)) {
+      continue;
+    }
+    if (textures.size() >= 4096 ||
+        !DecodeVolumeFloat(&d[o + bufOff], bufSize, decomp, t.format, t.w, t.h, t.depth, t.rgba, error)) {
+      note = "grid not decoded";
+      return false;
+    }
+    textures.push_back(std::move(t));
+  }
+  return true;
+}
+
 bool Writer::Grid(const RoomPak& rp, const Vec3& shift, const std::vector<Vec3>& check, std::vector<uint8_t>& out,
                   std::string& note) const {
   out.clear();
-  const PakAsset* asset = FirstOfType(*rp.pak, Tag("LTPB"));
-  if (asset == nullptr) {
+  const auto ltpb = [](const RoomPak& r, std::vector<uint8_t>& d) {
+    const PakAsset* asset = r.pak != nullptr ? FirstOfType(*r.pak, Tag("LTPB")) : nullptr;
+    std::string error;
+    return asset != nullptr && r.pak->ReadAsset(*asset, d, error);
+  };
+  std::vector<uint8_t> d;
+  if (FirstOfType(*rp.pak, Tag("LTPB")) == nullptr) {
     note = "no grid";
     return false;
   }
-  std::vector<uint8_t> d;
-  std::string error;
-  if (!rp.pak->ReadAsset(*asset, d, error)) {
+  if (!ltpb(rp, d)) {
     note = "grid not decoded";
     return false;
   }
@@ -2769,52 +2811,99 @@ bool Writer::Grid(const RoomPak& rp, const Vec3& shift, const std::vector<Vec3>&
   }
   int lo[3], hi[3];
   for (size_t i = 0; i < 3; ++i) {
-    lo[i] = int16_t(Le16(&d[phdr + 44 + 2 * i]));
-    hi[i] = int16_t(Le16(&d[phdr + 50 + 2 * i]));
+    lo[i] = int16_t(ReadLE16(&d[phdr + 44 + 2 * i]));
+    hi[i] = int16_t(ReadLE16(&d[phdr + 50 + 2 * i]));
   }
 
-  // The textures are the TXTR forms inside the LTPB, each preceded by a 77 byte record.
   std::vector<GridTexture> textures;
-  for (size_t o = 77; o + 32 < d.size(); ++o) {
-    if (std::memcmp(&d[o], "RFRM", 4) != 0 || std::memcmp(&d[o + 20], "TXTR", 4) != 0) {
-      continue;
-    }
-    const uint8_t* g = &d[o - 77];
-    if (o + 76 > d.size()) {
-      note = "grid not decoded";
-      return false;
-    }
-    const uint32_t decomp = Le32(g + 20), bufOff = Le32(g + 45), bufSize = Le32(g + 49);
-    GridTexture t;
-    t.bx = int32_t(Le32(g + 61));
-    t.by = int32_t(Le32(g + 65));
-    t.bz = int32_t(Le32(g + 69));
-    t.index = Le32(g + 73);
-    const uint8_t* h = &d[o + 56];
-    t.kind = Le32(h);
-    t.format = Le32(h + 4);
-    t.w = Le32(h + 8);
-    t.h = Le32(h + 12);
-    t.depth = Le32(h + 16);
-    if (bufOff > d.size() - o || bufSize > d.size() - o - bufOff) {
-      note = "grid not decoded";
-      return false;
-    }
-    if (t.index > 5 || t.h != 64 || t.depth != 16 || (t.w != 64 && t.w != 128)) {
-      note = "grid texture " + std::to_string(t.w) + "x" + std::to_string(t.h) + "x" + std::to_string(t.depth) +
-             " index " + std::to_string(t.index);
-      return false;
-    }
-    if (textures.size() >= 4096 ||
-        !DecodeVolumeFloat(&d[o + bufOff], bufSize, decomp, t.format, t.w, t.h, t.depth, t.rgba, error)) {
-      note = "grid not decoded";
-      return false;
-    }
-    textures.push_back(std::move(t));
+  if (!ReadGridTextures(d, [](const GridTexture&) { return true; }, textures, note)) {
+    return false;
   }
   if (textures.empty()) {
     note = "no grid";
     return false;
+  }
+
+  // Blocks of the room's PHDR box that its own LTPB lacks read 0 in the room alone, but
+  // Remastered's probe texture is world-wide: a loaded neighbour area keeps its tiles mapped
+  // (EnsureGroupIdTilesActive), so far scenery outside the room's bake is lit by theirs. Each
+  // missing block comes from the world's room whose copy has the most lit points.
+  // MP_REMASTERED_GRID_NEIGHBOURS=0 turns this off.
+  int borrowed = 0;
+  if (port::EnvFlag("MP_REMASTERED_GRID_NEIGHBOURS", true)) {
+    const auto key = [](const GridTexture& t) { return GridKey{int32_t(t.index), t.bx, t.by, t.bz}; };
+    if (!m_gridOwnersReady) {
+      m_gridOwnersReady = true;
+      std::map<GridKey, size_t> lit;
+      for (const RoomPak& other : m_rooms) {
+        std::vector<uint8_t> od;
+        std::vector<GridTexture> found;
+        std::string ignored;
+        if (other.pak == nullptr || !ltpb(other, od) ||
+            !ReadGridTextures(od, [](const GridTexture& t) { return t.index == 0; }, found, ignored)) {
+          continue;
+        }
+        for (const GridTexture& t : found) {
+          size_t n = 0;
+          for (size_t i = 0; i + 3 < t.rgba.size(); i += 4) {
+            n += (t.rgba[i] + t.rgba[i + 1]) + t.rgba[i + 2] > 0 ? 1 : 0;
+          }
+          size_t& best = lit[key(t)];
+          const RoomPak*& owner = m_gridOwners[key(t)];
+          // Ties go to the lower name, so the output doesn't hang on the room order.
+          if (owner == nullptr || n > best || (n == best && other.name < owner->name)) {
+            best = n;
+            m_gridOwners[key(t)] = &other;
+          }
+        }
+      }
+    }
+    std::set<GridKey> own;
+    for (const GridTexture& t : textures) {
+      own.insert(key(t));
+    }
+    const auto floorDiv = [](int64_t a, int64_t b) { return int32_t(a >= 0 ? a / b : -((-a + b - 1) / b)); };
+    // Per lending room, the layer-0 blocks it fills.
+    std::map<const RoomPak*, std::vector<GridKey>> lenders;
+    for (int32_t z = floorDiv(lo[2], 16); z <= floorDiv(hi[2], 16); ++z) {
+      for (int32_t y = floorDiv(lo[1], 64); y <= floorDiv(hi[1], 64); ++y) {
+        for (int32_t x = floorDiv(lo[0], 64); x <= floorDiv(hi[0], 64); ++x) {
+          const GridKey hole{0, x, y, z};
+          const auto owner = m_gridOwners.find(hole);
+          if (own.count(hole) == 0 && owner != m_gridOwners.end() && owner->second->name != rp.name) {
+            lenders[owner->second].push_back(hole);
+          }
+        }
+      }
+    }
+    // Each layer of the lender's block, where the room lacks that layer's block (layers 2..5
+    // are 128 wide, so their block holds two of layer 0's).
+    std::set<GridKey> taken;
+    for (const auto& [lender, holes] : lenders) {
+      std::vector<uint8_t> od;
+      if (!ltpb(*lender, od)) {
+        continue;
+      }
+      std::vector<GridTexture> found;
+      std::string ignored;
+      ReadGridTextures(od, [&](const GridTexture& t) {
+        const GridKey k = key(t);
+        if (own.count(k) != 0 || taken.count(k) != 0) {
+          return false;
+        }
+        for (const GridKey& hole : holes) {
+          if (t.by == hole[2] && t.bz == hole[3] && (t.w == 64 ? t.bx == hole[1] : t.bx == floorDiv(hole[1], 2))) {
+            taken.insert(k);
+            return true;
+          }
+        }
+        return false;
+      }, found, ignored);
+      for (GridTexture& t : found) {
+        textures.push_back(std::move(t));
+        ++borrowed;
+      }
+    }
   }
 
   // Where each texture starts, in points. A block is 64 x 64 x 16 points, and a texture
@@ -2822,23 +2911,40 @@ bool Writer::Grid(const RoomPak& rp, const Vec3& shift, const std::vector<Vec3>&
   const auto start = [](const GridTexture& t, int axis) -> int64_t {
     return axis == 0 ? int64_t(t.bx) * int64_t(t.w) : axis == 1 ? int64_t(t.by) * 64 : int64_t(t.bz) * 16;
   };
-  const auto extent = [](const GridTexture& t, int axis) -> int64_t {
-    return axis == 0 ? int64_t(t.w) : axis == 1 ? 64 : 16;
-  };
-  int64_t base[3] = {INT64_MAX, INT64_MAX, INT64_MAX}, top[3] = {INT64_MIN, INT64_MIN, INT64_MIN};
+  int64_t base[3] = {INT64_MAX, INT64_MAX, INT64_MAX};
   for (const GridTexture& t : textures) {
     for (int i = 0; i < 3; ++i) {
       base[i] = std::min(base[i], start(t, i));
-      top[i] = std::max(top[i], start(t, i) + extent(t, i));
     }
   }
-  int64_t c0[3], c1[3];
-  for (int i = 0; i < 3; ++i) {
-    c0[i] = std::max<int64_t>(lo[i] - 1 - base[i], 0);
-    c1[i] = std::min<int64_t>(hi[i] + 2 - base[i], top[i] - base[i]);
+  // The blocks are whole tiles of the world's bake, lit well past the room's PHDR box
+  // (Main Plaza has 23k lit points outside it), and Remastered samples all of them, with
+  // unmapped tiles reading zero. So the kept part is the lit points' bounds and one empty
+  // point around them: the texture's clamped reads past it are zero too.
+  int64_t c0[3] = {INT64_MAX, INT64_MAX, INT64_MAX}, c1[3] = {INT64_MIN, INT64_MIN, INT64_MIN};
+  for (const GridTexture& t : textures) {
+    if (t.index != 0) {
+      continue;
+    }
+    const int64_t x0 = start(t, 0) - base[0], y0 = start(t, 1) - base[1], z0 = start(t, 2) - base[2];
+    for (int64_t z = 0; z < 16; ++z) {
+      for (int64_t y = 0; y < 64; ++y) {
+        for (int64_t x = 0; x < int64_t(t.w); ++x) {
+          const float* p = &t.rgba[((size_t(z) * 64 + size_t(y)) * t.w + size_t(x)) * 4];
+          if (!((p[0] + p[1]) + p[2] > 0)) {
+            continue;
+          }
+          const int64_t q[3] = {x0 + x, y0 + y, z0 + z};
+          for (int i = 0; i < 3; ++i) {
+            c0[i] = std::min(c0[i], q[i] - 1);
+            c1[i] = std::max(c1[i], q[i] + 2);
+          }
+        }
+      }
+    }
   }
   if (c1[0] <= c0[0] || c1[1] <= c0[1] || c1[2] <= c0[2]) {
-    note = "grid box outside its blocks";
+    note = "grid empty";
     return false;
   }
   int64_t size[3] = {c1[0] - c0[0], c1[1] - c0[1], c1[2] - c0[2]};
@@ -2866,13 +2972,17 @@ bool Writer::Grid(const RoomPak& rp, const Vec3& shift, const std::vector<Vec3>&
       }
     }
   }
+  // Point k sits at 2k metres in Remastered's axes, not in the middle of a 2 m cell:
+  // CBakedLightingProbeTexture::Initialize (0x1c8cbc) rounds the box to points
+  // (floor(x * 0.5 + 0.5)) and maps to texels by Scale(1 / size) * Translate(0.5 - lo) *
+  // Scale(0.5), so texel k's middle is point lo + k.
   double m[3][4];
   const Vec3 shifted = MulR2G(shift);  // R2G is its own transpose
   for (int i = 0; i < 3; ++i) {
     for (int j = 0; j < 3; ++j) {
       m[i][j] = kR2G[j][i] / 2;
     }
-    m[i][3] = -shifted[size_t(i)] / 2 - 0.5 - double(origin[i]);
+    m[i][3] = -shifted[size_t(i)] / 2 - double(origin[i]);
   }
   // The game reads a room's file in one go when the area loads, and the largest
   // rooms have millions of points; ambient light varies slowly, so those are
@@ -2978,11 +3088,11 @@ bool Writer::Grid(const RoomPak& rp, const Vec3& shift, const std::vector<Vec3>&
 
   for (int i = 0; i < 3; ++i) {
     for (int j = 0; j < 4; ++j) {
-      PutFloat(out, m[i][j]);
+      AppendLEFloat(out, m[i][j]);
     }
   }
   for (int i = 0; i < 3; ++i) {
-    PutLe32(out, uint32_t(size[i]));
+    AppendLE32(out, uint32_t(size[i]));
   }
   out.insert(out.end(), pts.begin(), pts.end());
 
@@ -2990,6 +3100,9 @@ bool Writer::Grid(const RoomPak& rp, const Vec3& shift, const std::vector<Vec3>&
   std::snprintf(buf, sizeof buf, "grid %lldx%lldx%lld %.0f%% lit", (long long)size[0], (long long)size[1],
                 (long long)size[2], 100.0 * double(litCount) / double(points));
   note = buf;
+  if (borrowed > 0) {
+    note += ", " + std::to_string(borrowed) + " borrowed blocks";
+  }
   if (!check.empty()) {
     int ok = 0;
     for (const Vec3& c : check) {
@@ -3016,17 +3129,17 @@ struct Mcon {
 };
 
 bool ReadMcon(const std::vector<uint8_t>& d, Mcon& out) {
-  if (d.size() < 32 || Be32(&d[0]) != Tag("RFRM") || Le64(&d[4]) > d.size() - 32) {
+  if (d.size() < 32 || ReadBE32(&d[0]) != Tag("RFRM") || ReadLE64(&d[4]) > d.size() - 32) {
     return false;
   }
-  const size_t end = 32 + size_t(Le64(&d[4]));
-  for (size_t o = 32; o + 24 <= end && Be32(&d[o]) != Tag("PEEK");) {
-    const uint64_t size = Le64(&d[o + 4]);
+  const size_t end = 32 + size_t(ReadLE64(&d[4]));
+  for (size_t o = 32; o + 24 <= end && ReadBE32(&d[o]) != Tag("PEEK");) {
+    const uint64_t size = ReadLE64(&d[o + 4]);
     const size_t start = o + 24;
     if (size > end - start) {
       return false;
     }
-    if (Be32(&d[o]) == Tag("MCVD")) {
+    if (ReadBE32(&d[o]) == Tag("MCVD")) {
       size_t p = start;
       const size_t stop = start + size_t(size);
       // A counted vector of `width` byte items; null when it runs past the chunk.
@@ -3034,7 +3147,7 @@ bool ReadMcon(const std::vector<uint8_t>& d, Mcon& out) {
         if (stop - p < 4) {
           return nullptr;
         }
-        count = Le32(&d[p]);
+        count = ReadLE32(&d[p]);
         p += 4;
         if (count > (stop - p) / width) {
           return nullptr;
@@ -3061,7 +3174,7 @@ bool ReadMcon(const std::vector<uint8_t>& d, Mcon& out) {
         out.models.push_back(SwapUuid(m + 16 * i));
       }
       for (size_t i = 0; i < indices; ++i) {
-        out.index.push_back(Le16(ix + 2 * i));
+        out.index.push_back(ReadLE16(ix + 2 * i));
       }
       return true;
     }
@@ -3181,9 +3294,9 @@ void Writer::WriteGeometry(const RoomData& r, uint32_t mrea, const Area& area) {
       for (int row = 0; row < 3; ++row) {
         const uint8_t* from = t + 16 * kAxis[row];
         for (int col = 0; col < 3; ++col) {
-          inst.transform[4 * row + col] = float(kSign[row] * kSign[col] * double(LeFloat(from + 4 * kAxis[col])));
+          inst.transform[4 * row + col] = float(kSign[row] * kSign[col] * double(ReadLEFloat(from + 4 * kAxis[col])));
         }
-        inst.transform[4 * row + 3] = float(kSign[row] * double(LeFloat(from + 12)));
+        inst.transform[4 * row + 3] = float(kSign[row] * double(ReadLEFloat(from + 12)));
       }
       script(inst, c->entity, active);
       ++modcons;
@@ -3220,17 +3333,17 @@ void Writer::WriteGeometry(const RoomData& r, uint32_t mrea, const Area& area) {
     }
     const auto f = r.room.Flat(from);
     const auto blend = f.find(kPropModulateBlend);
-    if (blend == f.end() || blend->second.size != 4 || Le32(r.room.Bytes(blend->second)) != kModulateIncandescence) {
+    if (blend == f.end() || blend->second.size != 4 || ReadLE32(r.room.Bytes(blend->second)) != kModulateIncandescence) {
       continue;
     }
     const auto intensity = f.find(kPropModulateIntensity);
     const float scale =
-        intensity != f.end() && intensity->second.size == 4 ? LeFloat(r.room.Bytes(intensity->second)) : 1.f;
+        intensity != f.end() && intensity->second.size == 4 ? ReadLEFloat(r.room.Bytes(intensity->second)) : 1.f;
     std::array<float, 3> glow;
     for (int i = 0; i < 3; ++i) {
       Span s;
       glow[i] = r.room.Nested(from, {kPropModulateColorB, kPropColorChannel[i]}, s) && s.size == 4
-                    ? LeFloat(r.room.Bytes(s))
+                    ? ReadLEFloat(r.room.Bytes(s))
                     : 1.f;
       glow[i] = std::isfinite(glow[i] * scale) ? std::max(glow[i] * scale, 0.f) : 0.f;
     }
@@ -3298,7 +3411,7 @@ void Writer::WriteGeometry(const RoomData& r, uint32_t mrea, const Area& area) {
         std::string text;
         const PortRemasteredAnim::Anim* anim =
             name != f.end() && name->second.size == 8 &&
-                    r.room.String(Le32(r.room.Bytes(name->second)), Le32(r.room.Bytes(name->second) + 4), text)
+                    r.room.String(ReadLE32(r.room.Bytes(name->second)), ReadLE32(r.room.Bytes(name->second) + 4), text)
                 ? PortRemasteredAnim::Find(ch, text)
                 : nullptr;
         if (anim == nullptr || anim->frames < 2 || !(anim->fps > 0.f)) {
@@ -3571,7 +3684,7 @@ void Writer::WriteGeometry(const RoomData& r, uint32_t mrea, const Area& area) {
       }
       std::string name;
       if (ch->second != nullptr &&
-          r.room.String(Le32(r.room.Bytes(nameProp)), Le32(r.room.Bytes(nameProp) + 4), name)) {
+          r.room.String(ReadLE32(r.room.Bytes(nameProp)), ReadLE32(r.room.Bytes(nameProp) + 4), name)) {
         anim = PortRemasteredAnim::Find(*ch->second, name);
       }
       if (anim == nullptr || anim->frames < 2 || !(anim->fps > 0.f)) {
@@ -3703,13 +3816,13 @@ void Writer::WriteGeometry(const RoomData& r, uint32_t mrea, const Area& area) {
     inst.sky = true;
     const auto intensity = f.find(kPropSkyboxIntensity);
     const float level =
-        intensity != f.end() && intensity->second.size == 4 ? LeFloat(r.room.Bytes(intensity->second)) : 1.f;
+        intensity != f.end() && intensity->second.size == 4 ? ReadLEFloat(r.room.Bytes(intensity->second)) : 1.f;
     const auto colour = f.find(kPropSkyboxColor);
     for (int i = 0; i < 3; ++i) {
       Span s;
-      const float channel = colour != f.end() && colour->second.size >= 12 ? LeFloat(r.room.Bytes(colour->second) + 4 * i)
+      const float channel = colour != f.end() && colour->second.size >= 12 ? ReadLEFloat(r.room.Bytes(colour->second) + 4 * i)
                             : r.room.Nested(*c, {kPropSkyboxColor, kPropColorChannel[i]}, s) && s.size == 4
-                                ? LeFloat(r.room.Bytes(s))
+                                ? ReadLEFloat(r.room.Bytes(s))
                                 : 1.f;
       inst.skyRadiance[i] = std::isfinite(channel * level) ? std::max(channel * level, 0.f) : 0.f;
     }
@@ -3761,25 +3874,25 @@ void Writer::WriteLiquids(const RoomData& r, uint32_t mrea) {
     Span s;
     int type = RoomLiquid::kWater;
     if (r.room.Nested(*c, {kPropWaterFluid[0], kPropWaterFluid[1], kPropWaterFluid[2]}, s) && s.size >= 4) {
-      const uint32_t fluid = Le32(r.room.Bytes(s));
+      const uint32_t fluid = ReadLE32(r.room.Bytes(s));
       type = fluid == 10 ? RoomLiquid::kPoison : fluid == 11 ? RoomLiquid::kLava : RoomLiquid::kWater;
     }
     fluids[c->entity] = type;
     if (r.room.Nested(*c, {kPropWaterXrayOpacity}, s) && s.size >= 4) {
-      xrayOpacity[c->entity] = LeFloat(r.room.Bytes(s));
+      xrayOpacity[c->entity] = ReadLEFloat(r.room.Bytes(s));
     }
     Vec3 pos, rot, scale;
     if (r.room.Xform(*c, pos, rot, scale)) {
       for (int row = 0; row < 3; ++row) {
-        PutFloat(filters, kSign[row] * pos[kAxis[row]]);
+        AppendLEFloat(filters, kSign[row] * pos[kAxis[row]]);
       }
       for (const uint32_t channel : kPropColorRGBA) {
         // SLdrColor_MP1Typedef's default is (1, 1, 1, 1).
         float value = 1.f;
         if (r.room.Nested(*c, {kPropWaterFilterColor, channel}, s) && s.size >= 4) {
-          value = LeFloat(r.room.Bytes(s));
+          value = ReadLEFloat(r.room.Bytes(s));
         }
-        PutFloat(filters, value);
+        AppendLEFloat(filters, value);
       }
       ++filterCount;
     }
@@ -3804,7 +3917,7 @@ void Writer::WriteLiquids(const RoomData& r, uint32_t mrea) {
       liquid.type = lava ? RoomLiquid::kLava : fluid != fluids.end() ? fluid->second : RoomLiquid::kWater;
       for (int i = 0; lava && i < 6; ++i) {
         if (const auto v = f.find(kPropLava[i]); v != f.end() && v->second.size == 4) {
-          liquid.lava[i] = LeFloat(r.room.Bytes(v->second));
+          liquid.lava[i] = ReadLEFloat(r.room.Bytes(v->second));
         }
       }
       if (!lava) {
@@ -3813,7 +3926,7 @@ void Writer::WriteLiquids(const RoomData& r, uint32_t mrea) {
         auto value = [&](std::initializer_list<uint32_t> path, float* out, int n) {
           if (r.room.Nested(*c, path, s) && s.size >= size_t(4 * n)) {
             for (int i = 0; i < n; ++i) {
-              out[i] = LeFloat(r.room.Bytes(s) + 4 * i);
+              out[i] = ReadLEFloat(r.room.Bytes(s) + 4 * i);
             }
           }
         };
@@ -3874,8 +3987,8 @@ void Writer::WriteLiquids(const RoomData& r, uint32_t mrea) {
           {s[2] * k[1], s[2] * s[1] * s[0] + k[2] * k[0], s[2] * s[1] * k[0] - k[2] * s[0]},
           {-s[1], k[1] * s[0], k[1] * k[0]},
       };
-      PutLe32(body, uint32_t(liquid.type));
-      PutLe32(body, id);
+      AppendLE32(body, uint32_t(liquid.type));
+      AppendLE32(body, id);
       for (int row = 0; row < 3; ++row) {
         // A lava pool is converted into the area's axes. A water mesh is not: it stays in
         // Remastered's model space and the transform takes it there, (x, y, z) -> (-x, z, y).
@@ -3891,18 +4004,18 @@ void Writer::WriteLiquids(const RoomData& r, uint32_t mrea) {
         }
         for (int c = 0; c < 3; ++c) {
           // The entity's scale is the size of the volume; the model is in units already.
-          PutFloat(body, col[c]);
+          AppendLEFloat(body, col[c]);
         }
-        PutFloat(body, kSign[row] * pos[kAxis[row]]);
+        AppendLEFloat(body, kSign[row] * pos[kAxis[row]]);
       }
       if (!lava) {
-        PutLe32(body, uint32_t(assets.vertices.size()));
-        PutLe32(body, uint32_t(assets.indices.size()));
+        AppendLE32(body, uint32_t(assets.vertices.size()));
+        AppendLE32(body, uint32_t(assets.indices.size()));
         for (const float v : assets.boundsMin) {
-          PutFloat(body, v);
+          AppendLEFloat(body, v);
         }
         for (const float v : assets.boundsMax) {
-          PutFloat(body, v);
+          AppendLEFloat(body, v);
         }
         for (const uint8_t v : liquid.features) {
           body.push_back(v);
@@ -3910,7 +4023,7 @@ void Writer::WriteLiquids(const RoomData& r, uint32_t mrea) {
         body.push_back(0);
         auto floats = [&](const float* v, int n) {
           for (int i = 0; i < n; ++i) {
-            PutFloat(body, v[i]);
+            AppendLEFloat(body, v[i]);
           }
         };
         floats(liquid.waves[0], 5);
@@ -3925,18 +4038,18 @@ void Writer::WriteLiquids(const RoomData& r, uint32_t mrea) {
         floats(liquid.rain, 10);
         floats(liquid.flow, 10);
         floats(&liquid.xrayOpacity, 1);
-        PutLe32(body, assets.normalMap);
-        PutLe32(body, assets.flowMap);
-        PutLe32(body, assets.rainNoise);
-        PutLe32(body, assets.rainNoiseWidth);
-        PutLe32(body, assets.rainNoiseHeight);
+        AppendLE32(body, assets.normalMap);
+        AppendLE32(body, assets.flowMap);
+        AppendLE32(body, assets.rainNoise);
+        AppendLE32(body, assets.rainNoiseWidth);
+        AppendLE32(body, assets.rainNoiseHeight);
         for (const RoomWaterAssets::Vertex& v : assets.vertices) {
           floats(v.pos, 3);
           floats(v.uv, 4);
           body.insert(body.end(), v.color, v.color + 4);
         }
         for (const uint32_t i : assets.indices) {
-          PutLe32(body, i);
+          AppendLE32(body, i);
         }
       }
       ++count;
@@ -3946,11 +4059,11 @@ void Writer::WriteLiquids(const RoomData& r, uint32_t mrea) {
     return;
   }
   std::vector<uint8_t> out;
-  PutLe32(out, 0x4C52504D);  // 'MPRL'
-  PutLe32(out, 4);
-  PutLe32(out, count);
+  AppendLE32(out, 0x4C52504D);  // 'MPRL'
+  AppendLE32(out, 4);
+  AppendLE32(out, count);
   out.insert(out.end(), body.begin(), body.end());
-  PutLe32(out, filterCount);
+  AppendLE32(out, filterCount);
   out.insert(out.end(), filters.begin(), filters.end());
   char file[32];
   std::snprintf(file, sizeof file, "%08X.roomliquid", mrea);
@@ -4008,7 +4121,7 @@ std::string Writer::WriteRoom(const RoomData& r, const std::map<std::string, Pla
         refl.size() < 0x50) {
       continue;
     }
-    const float probeScale = LeFloat(&refl[0x4c]);
+    const float probeScale = ReadLEFloat(&refl[0x4c]);
     const Pak* txtrPak = nullptr;
     Id16 txtrId;
     std::vector<uint8_t> txtr;
@@ -4022,14 +4135,14 @@ std::string Writer::WriteRoom(const RoomData& r, const std::map<std::string, Pla
         continue;
       }
       std::vector<uint8_t> blob;
-      PutLe32(blob, cube.size);
-      PutLe32(blob, cube.mipCount);
-      PutLe32(blob, cube.isSigned ? 1 : 0);
+      AppendLE32(blob, cube.size);
+      AppendLE32(blob, cube.mipCount);
+      AppendLE32(blob, cube.isSigned ? 1 : 0);
       size_t bytes = 0;
       for (const auto& mip : cube.mips) {
         bytes += mip.size();
       }
-      PutLe32(blob, uint32_t(bytes));
+      AppendLE32(blob, uint32_t(bytes));
       for (const auto& mip : cube.mips) {
         blob.insert(blob.end(), mip.begin(), mip.end());
       }
@@ -4081,10 +4194,10 @@ std::string Writer::WriteRoom(const RoomData& r, const std::map<std::string, Pla
     }
     for (int i = 0; i < 3; ++i) {
       for (int j = 0; j < 3; ++j) {
-        PutFloat(probes, inv[i][j] / half[size_t(i)]);
+        AppendLEFloat(probes, inv[i][j] / half[size_t(i)]);
       }
       const double it = (inv[i][0] * trans[0] + inv[i][1] * trans[1]) + inv[i][2] * trans[2];
-      PutFloat(probes, (-it - centre[size_t(i)]) / half[size_t(i)]);
+      AppendLEFloat(probes, (-it - centre[size_t(i)]) / half[size_t(i)]);
     }
     // CUBE @ R2G.T @ inv, in two products with CUBE the identity, to keep numpy's signs of zero.
     constexpr double kCube[3][3] = {{1, 0, 0}, {0, 1, 0}, {0, 0, 1}};
@@ -4096,23 +4209,23 @@ std::string Writer::WriteRoom(const RoomData& r, const std::map<std::string, Pla
     }
     for (int i = 0; i < 3; ++i) {
       for (int j = 0; j < 3; ++j) {
-        PutFloat(probes, (cr[i][0] * inv[0][j] + cr[i][1] * inv[1][j]) + cr[i][2] * inv[2][j]);
+        AppendLEFloat(probes, (cr[i][0] * inv[0][j] + cr[i][1] * inv[1][j]) + cr[i][2] * inv[2][j]);
       }
     }
     const auto prop = [&](uint32_t id, float fallback) {
       const auto p = f.find(id);
-      return p != f.end() && p->second.size >= 4 ? LeFloat(r.room.Bytes(p->second)) : fallback;
+      return p != f.end() && p->second.size >= 4 ? ReadLEFloat(r.room.Bytes(p->second)) : fallback;
     };
     const auto priority = f.find(kPropProbePriority);
     // The retail layer its own layer is drawn on (MatchScripts), as for colour grades.
     const auto layer = scripts.layer.find(c->entity);
-    PutLe32(probes, uint32_t(layer != scripts.layer.end() ? int32_t(layer->second) : -1));
-    PutLe32(probes, uint32_t(index[txtrId]));
-    PutFloat(probes, probeScale);
-    PutFloat(probes, prop(kPropProbePadding, 1.0f));
-    PutLe32(probes, priority != f.end() && priority->second.size >= 4 ? Le32(r.room.Bytes(priority->second)) : 0u);
-    PutFloat(probes, prop(kPropProbeMin, 0.0f));
-    PutFloat(probes, prop(kPropProbeMax, 1.0f));
+    AppendLE32(probes, uint32_t(layer != scripts.layer.end() ? int32_t(layer->second) : -1));
+    AppendLE32(probes, uint32_t(index[txtrId]));
+    AppendLEFloat(probes, probeScale);
+    AppendLEFloat(probes, prop(kPropProbePadding, 1.0f));
+    AppendLE32(probes, priority != f.end() && priority->second.size >= 4 ? ReadLE32(r.room.Bytes(priority->second)) : 0u);
+    AppendLEFloat(probes, prop(kPropProbeMin, 0.0f));
+    AppendLEFloat(probes, prop(kPropProbeMax, 1.0f));
     ++probeCount;
   }
 
@@ -4128,72 +4241,72 @@ std::string Writer::WriteRoom(const RoomData& r, const std::map<std::string, Pla
   }
 
   std::vector<uint8_t> out = {'M', 'P', 'E', 'V'};
-  PutLe32(out, 15);
+  AppendLE32(out, 15);
   float tone[5];
   std::copy(tonemap, tonemap + 5, tone);
   Tonemap(r, tone);
   for (int i = 0; i < 4; ++i) {
-    PutFloat(out, tone[i]);
+    AppendLEFloat(out, tone[i]);
   }
-  PutLe32(out, uint32_t(probeCount));
-  PutLe32(out, uint32_t(cubes.size()));
+  AppendLE32(out, uint32_t(probeCount));
+  AppendLE32(out, uint32_t(cubes.size()));
   out.insert(out.end(), probes.begin(), probes.end());
   for (const auto& blob : cubes) {
     out.insert(out.end(), blob.begin(), blob.end());
   }
-  PutLe32(out, grid.empty() ? 0 : 1);
+  AppendLE32(out, grid.empty() ? 0 : 1);
   out.insert(out.end(), grid.begin(), grid.end());
   float exposure[5];
   Exposure(r, exposure);
-  PutFloat(out, exposure[0]);
-  PutFloat(out, exposure[1]);
-  PutFloat(out, exposure[2]);
-  PutFloat(out, tone[4]);
+  AppendLEFloat(out, exposure[0]);
+  AppendLEFloat(out, exposure[1]);
+  AppendLEFloat(out, exposure[2]);
+  AppendLEFloat(out, tone[4]);
   BloomData bloom = worldBloom;
   ReadBloom(r, bloom);
-  PutFloat(out, bloom.threshold);
-  PutLe32(out, bloom.present ? uint32_t(bloom.tints.size() / 4) : 0);
+  AppendLEFloat(out, bloom.threshold);
+  AppendLE32(out, bloom.present ? uint32_t(bloom.tints.size() / 4) : 0);
   if (bloom.present) {
     for (const float v : bloom.tints) {
-      PutFloat(out, v);
+      AppendLEFloat(out, v);
     }
   }
   std::vector<GradeData> grades = worldGrades;
   ReadGrades(r, m.area, grades);
-  PutLe32(out, uint32_t(grades.size()));
+  AppendLE32(out, uint32_t(grades.size()));
   for (const GradeData& g : grades) {
-    PutLe32(out, uint32_t(g.layer));
-    PutFloat(out, g.fadeIn);
-    PutFloat(out, g.fadeOut);
+    AppendLE32(out, uint32_t(g.layer));
+    AppendLEFloat(out, g.fadeIn);
+    AppendLEFloat(out, g.fadeOut);
     out.push_back(g.on ? 1 : 0);
     out.insert(out.end(), 3, 0);
-    PutLe32(out, uint32_t(g.priority));
-    PutLe32(out, uint32_t(g.links.size()));
+    AppendLE32(out, uint32_t(g.priority));
+    AppendLE32(out, uint32_t(g.links.size()));
     for (const PortRoomGeo::Link& link : g.links) {
-      PutLe32(out, link.sender);
+      AppendLE32(out, link.sender);
       out.push_back(link.state);
       out.push_back(link.action);
       out.insert(out.end(), 2, 0);
     }
     out.insert(out.end(), g.lut.begin(), g.lut.end());
   }
-  PutFloat(out, exposure[3]);
-  PutFloat(out, exposure[4]);
+  AppendLEFloat(out, exposure[3]);
+  AppendLEFloat(out, exposure[4]);
   std::vector<BacklightData> backlights = worldBacklights;
   ReadBacklights(r, m.area, backlights);
-  PutLe32(out, uint32_t(backlights.size()));
+  AppendLE32(out, uint32_t(backlights.size()));
   for (const BacklightData& b : backlights) {
-    PutLe32(out, uint32_t(b.layer));
-    PutFloat(out, b.fadeIn);
-    PutFloat(out, b.fadeOut);
+    AppendLE32(out, uint32_t(b.layer));
+    AppendLEFloat(out, b.fadeIn);
+    AppendLEFloat(out, b.fadeOut);
     out.push_back(b.on ? 1 : 0);
     out.insert(out.end(), 3, 0);
-    PutLe32(out, uint32_t(b.priority));
-    PutFloat(out, b.top);
-    PutFloat(out, b.back);
-    PutLe32(out, uint32_t(b.links.size()));
+    AppendLE32(out, uint32_t(b.priority));
+    AppendLEFloat(out, b.top);
+    AppendLEFloat(out, b.back);
+    AppendLE32(out, uint32_t(b.links.size()));
     for (const PortRoomGeo::Link& link : b.links) {
-      PutLe32(out, link.sender);
+      AppendLE32(out, link.sender);
       out.push_back(link.state);
       out.push_back(link.action);
       out.insert(out.end(), 2, 0);
@@ -4201,44 +4314,44 @@ std::string Writer::WriteRoom(const RoomData& r, const std::map<std::string, Pla
   }
   std::vector<FogData> fogs = worldFogs;
   ReadFogs(r, m.area, fogs);
-  PutLe32(out, uint32_t(fogs.size()));
+  AppendLE32(out, uint32_t(fogs.size()));
   for (const FogData& g : fogs) {
-    PutLe32(out, uint32_t(g.layer));
+    AppendLE32(out, uint32_t(g.layer));
     for (const std::vector<uint8_t>* fade : {&g.fadeIn, &g.fadeOut}) {
       PortMayaSpline sline;
-      PutFloat(out, sline.Load(fade->data(), fade->size()) ? std::max(0.f, sline.LastTime()) : 0.f);
+      AppendLEFloat(out, sline.Load(fade->data(), fade->size()) ? std::max(0.f, sline.LastTime()) : 0.f);
     }
     out.push_back(g.on ? 1 : 0);
     out.insert(out.end(), 3, 0);
-    PutLe32(out, uint32_t(g.priority));
+    AppendLE32(out, uint32_t(g.priority));
     for (size_t i = 0; i < 10; ++i) {
       // The height term over retail z: the room's shift moves the heights.
-      PutFloat(out, i == 6 ? g.s[6] - g.s[5] * float(shift[2]) : g.s[i]);
+      AppendLEFloat(out, i == 6 ? g.s[6] - g.s[5] * float(shift[2]) : g.s[i]);
     }
     for (float v : g.wind) {
-      PutFloat(out, v);
+      AppendLEFloat(out, v);
     }
     out.push_back(g.useScriptWind ? 1 : 0);
     out.push_back(g.noProbe ? 1 : 0);
     out.insert(out.end(), 2, 0);
     for (float v : g.colorB) {
-      PutFloat(out, v);
+      AppendLEFloat(out, v);
     }
     for (float v : g.colorA) {
-      PutFloat(out, v);
+      AppendLEFloat(out, v);
     }
     for (float v : g.lut) {
-      PutFloat(out, v);
+      AppendLEFloat(out, v);
     }
-    PutLe32(out, uint32_t(g.links.size()));
+    AppendLE32(out, uint32_t(g.links.size()));
     for (const PortRoomGeo::Link& link : g.links) {
-      PutLe32(out, link.sender);
+      AppendLE32(out, link.sender);
       out.push_back(link.state);
       out.push_back(link.action);
       out.insert(out.end(), 2, 0);
     }
     for (const std::vector<uint8_t>* fade : {&g.fadeIn, &g.fadeOut}) {
-      PutLe32(out, uint32_t(fade->size()));
+      AppendLE32(out, uint32_t(fade->size()));
       out.insert(out.end(), fade->begin(), fade->end());
       out.insert(out.end(), (4 - fade->size() % 4) % 4, 0);
     }
@@ -4246,65 +4359,65 @@ std::string Writer::WriteRoom(const RoomData& r, const std::map<std::string, Pla
   std::vector<FogRegionData> regions;
   std::vector<FogTransitionData> transitions;
   ReadFogRegions(r, scripts, m.a, regions, transitions);
-  PutLe32(out, uint32_t(regions.size()));
+  AppendLE32(out, uint32_t(regions.size()));
   for (const FogRegionData& g : regions) {
-    PutLe32(out, uint32_t(g.layer));
+    AppendLE32(out, uint32_t(g.layer));
     out.push_back(g.on ? 1 : 0);
     out.push_back(g.fluid);
     out.push_back(g.hasColor ? 1 : 0);
     out.push_back(g.hasCap ? 1 : 0);
     for (const auto& row : g.m) {
       for (float v : row) {
-        PutFloat(out, v);
+        AppendLEFloat(out, v);
       }
     }
     for (float v : g.edgeScale) {
-      PutFloat(out, v);
+      AppendLEFloat(out, v);
     }
-    PutFloat(out, g.mult);
+    AppendLEFloat(out, g.mult);
     for (float v : g.edgeBias) {
-      PutFloat(out, v);
+      AppendLEFloat(out, v);
     }
-    PutFloat(out, g.cap);
+    AppendLEFloat(out, g.cap);
     for (float v : g.color) {
-      PutFloat(out, v);
+      AppendLEFloat(out, v);
     }
-    PutFloat(out, g.density);
+    AppendLEFloat(out, g.density);
     for (float v : g.box) {
-      PutFloat(out, v);
+      AppendLEFloat(out, v);
     }
-    PutLe32(out, uint32_t(g.links.size()));
+    AppendLE32(out, uint32_t(g.links.size()));
     for (const PortRoomGeo::Link& link : g.links) {
-      PutLe32(out, link.sender);
+      AppendLE32(out, link.sender);
       out.push_back(link.state);
       out.push_back(link.action);
       out.insert(out.end(), 2, 0);
     }
-    PutFloat(out, g.distance);
-    PutFloat(out, g.transmittance);
+    AppendLEFloat(out, g.distance);
+    AppendLEFloat(out, g.transmittance);
     out.push_back(g.subtract ? 1 : 0);
     out.insert(out.end(), 3, 0);
   }
-  PutLe32(out, uint32_t(transitions.size()));
+  AppendLE32(out, uint32_t(transitions.size()));
   for (const FogTransitionData& t : transitions) {
-    PutLe32(out, t.region);
-    PutLe32(out, uint32_t(t.layer));
+    AppendLE32(out, t.region);
+    AppendLE32(out, uint32_t(t.layer));
     out.push_back(t.on ? 1 : 0);
     out.push_back(t.autoStart ? 1 : 0);
     out.push_back(t.loop ? 1 : 0);
     out.push_back(t.select);
-    PutFloat(out, t.distance);
-    PutFloat(out, t.transmittance);
+    AppendLEFloat(out, t.distance);
+    AppendLEFloat(out, t.transmittance);
     for (float v : t.color) {
-      PutFloat(out, v);
+      AppendLEFloat(out, v);
     }
-    PutFloat(out, t.cap);
-    PutLe32(out, uint32_t(t.phase.size()));
+    AppendLEFloat(out, t.cap);
+    AppendLE32(out, uint32_t(t.phase.size()));
     out.insert(out.end(), t.phase.begin(), t.phase.end());
     out.insert(out.end(), (4 - t.phase.size() % 4) % 4, 0);
-    PutLe32(out, uint32_t(t.links.size()));
+    AppendLE32(out, uint32_t(t.links.size()));
     for (const PortRoomGeo::Link& link : t.links) {
-      PutLe32(out, link.sender);
+      AppendLE32(out, link.sender);
       out.push_back(link.state);
       out.push_back(link.action);
       out.insert(out.end(), 2, 0);

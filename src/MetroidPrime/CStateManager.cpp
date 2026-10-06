@@ -1679,7 +1679,13 @@ static void ApplyHoldToggle(CFinalInput& input, const CPlayer* player,
   const bool heldL = input.DL() || input.DLTrigger();
   const bool pressL = heldL && !sPrevL;
   sPrevL = heldL;
-  const bool locked = player != nullptr && player->GetOrbitState() != CPlayer::kOS_NoOrbit;
+  // Only a lock on an object counts: a killed target leaves the player orbiting
+  // its carcass, and a lost look angle a fixed point, both of which hold the aim
+  // in place for as long as L is held.
+  const CPlayer::EPlayerOrbitState orbit =
+      player != nullptr ? player->GetOrbitState() : CPlayer::kOS_NoOrbit;
+  const bool locked = orbit == CPlayer::kOS_OrbitObject ||
+                      orbit == CPlayer::kOS_ForcedOrbitObject || orbit == CPlayer::kOS_Grapple;
   const PortHoldToggle::Output outL =
       sLockOn.Update(unmorphed && PortDebug::LockOnToggle(), heldL, pressL, locked);
   if (sLockOn.Latched() || outL.held != heldL) {

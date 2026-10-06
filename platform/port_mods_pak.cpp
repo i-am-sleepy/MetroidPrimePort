@@ -3,6 +3,8 @@
 // unit test needs neither Aurora nor a disc.
 
 #include "port_mods.h"
+#include "port_strings.h"
+#include "port_bytes.h"
 
 #include <algorithm>
 #include <cstring>
@@ -17,9 +19,7 @@ constexpr uint32_t kPakVersion = 0x00030005;
 constexpr uint32_t kMaxNameLength = 1024;
 constexpr uint32_t kMaxResources = 1000000;
 
-uint32_t ReadBE32(const uint8_t* data) {
-  return (uint32_t(data[0]) << 24) | (uint32_t(data[1]) << 16) | (uint32_t(data[2]) << 8) | uint32_t(data[3]);
-}
+using port::ReadBE32;
 
 void WriteBE32(uint8_t* data, uint32_t value) {
   data[0] = uint8_t(value >> 24);
@@ -30,18 +30,7 @@ void WriteBE32(uint8_t* data, uint32_t value) {
 
 uint64_t RoundUp32(uint64_t value) { return (value + 31) & ~uint64_t(31); }
 
-int HexDigit(char c) {
-  if (c >= '0' && c <= '9') {
-    return c - '0';
-  }
-  if (c >= 'a' && c <= 'f') {
-    return c - 'a' + 10;
-  }
-  if (c >= 'A' && c <= 'F') {
-    return c - 'A' + 10;
-  }
-  return -1;
-}
+using port::HexDigit;
 
 std::filesystem::path HostPath(const std::string& text) {
   return std::filesystem::path(std::u8string(text.begin(), text.end()));

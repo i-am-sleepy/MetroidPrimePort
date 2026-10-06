@@ -1,3 +1,4 @@
+#include "port_env.h"
 #include "port_remastered_effect_import.h"
 
 #include "port_remastered_effect_convert.h"
@@ -1097,21 +1098,7 @@ std::atomic<bool> sEffects{false};
 }  // namespace
 
 bool WantsRemasteredEffects() {
-  const char* env = std::getenv("MP_REMASTERED_EFFECTS");
-  if (env == nullptr || env[0] == '\0') {
-    return sEffects.load();
-  }
-  std::string value(env);
-  for (char& c : value) {
-    c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
-  }
-  if (value == "1" || value == "true" || value == "on" || value == "yes") {
-    return true;
-  }
-  if (value == "0" || value == "false" || value == "off" || value == "no") {
-    return false;
-  }
-  return sEffects.load();
+  return port::EnvFlag("MP_REMASTERED_EFFECTS", sEffects.load());
 }
 
 void SetImportEffects(bool on) { sEffects = on; }
