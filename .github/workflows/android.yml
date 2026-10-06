@@ -23,8 +23,11 @@ jobs:
           SDKV=$(grep -oP 'compileSdk \K[0-9]+' android/app/build.gradle | head -1)
           echo "NDK=$NDKV CMake=$CMV SDK=$SDKV"
           echo "NDKV=$NDKV" >> "$GITHUB_ENV"
-          yes | sdkmanager --licenses > /dev/null || true
-          sdkmanager "platforms;android-$SDKV" "build-tools;34.0.0" "ndk;$NDKV" "cmake;$CMV"
+          SDKM="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
+          [ -x "$SDKM" ] || SDKM=$(find "$ANDROID_HOME" /usr/local/lib/android -name sdkmanager -type f 2>/dev/null | head -1)
+          echo "sdkmanager: $SDKM"
+          yes | "$SDKM" --licenses > /dev/null || true
+          "$SDKM" "platforms;android-$SDKV" "build-tools;34.0.0" "ndk;$NDKV" "cmake;$CMV"
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: aarch64-linux-android
