@@ -7,8 +7,10 @@ jobs:
     timeout-minutes: 180
     steps:
       - uses: actions/checkout@v4
-      - name: Apply touch-look patch
-        run: python3 touchlook_patch.py
+      - name: Apply patches
+        run: |
+          python3 touchlook_patch.py
+          python3 driver_patch.py
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
@@ -23,16 +25,40 @@ jobs:
           SDKV=$(grep -oP 'compileSdk \K[0-9]+' android/app/build.gradle | head -1)
           echo "NDK=$NDKV CMake=$CMV SDK=$SDKV"
           echo "NDKV=$NDKV" >> "$GITHUB_ENV"
-          yes | sdkmanager --licenses > /dev/null || true
-          sdkmanager "platforms;android-$SDKV" "build-tools;34.0.0" "ndk;$NDKV" "cmake;$CMV"
+          SDKM="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
+          [ -x "$SDKM" ] || SDKM=$(find "$ANDROID_HOME" /usr/local/lib/android -name sdkmanager -type f 2>/dev/null | head -1)
+          echo "sdkmanager: $SDKM"
+          yes | "$SDKM" --licenses > /dev/null || true
+          "$SDKM" "platforms;android-$SDKV" "build-tools;34.0.0" "ndk;$NDKV" "cmake;$CMV"
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: aarch64-linux-android
+      - name: Restore release key cache
+        uses: actions/cache@v4
+        with:
+          path: ~/mp-key
+          key: mp-release-key-v1
+      - name: Release key
+        run: |
+          mkdir -p ~/mp-key
+          if [ ! -f ~/mp-key/release.jks ]; then
+            keytool -genkeypair -keystore ~/mp-key/release.jks -storepass mpsideload \
+              -keypass mpsideload -alias mp -keyalg RSA -keysize 2048 -validity 10950 \
+              -dname "CN=MP Port Sideload"
+          fi
+          {
+            echo "MP_APK_KEYSTORE=$HOME/mp-key/release.jks"
+            echo "MP_APK_KEYSTORE_PASSWORD=mpsideload"
+            echo "MP_APK_KEY_ALIAS=mp"
+            echo "MP_APK_KEY_PASSWORD=mpsideload"
+          } >> "$GITHUB_ENV"
       - name: Build
         run: |
           export ANDROID_NDK_HOME="$ANDROID_HOME/ndk/$NDKV"
           chmod +x tools/*.sh
           tools/android_apk.sh :app:assembleRelease
+      - name: List native libs in the APK
+        run: unzip -l android/app/build/outputs/apk/release/*.apk | grep -E "lib/arm64" || true
       - uses: actions/upload-artifact@v4
         with:
           name: metroid-prime-touchlook-apk
